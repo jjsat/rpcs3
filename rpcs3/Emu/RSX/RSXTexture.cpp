@@ -102,7 +102,12 @@ namespace rsx
 			// OpenGL considers that highest mipmap level for DXTC format is when either width or height is 1
 			// not both. Assume it's the same for others backend.
 			u16 max_mipmap_count = static_cast<u16>(floor(log2(std::min(width() / 4, height() / 4))) + 1);
-			return std::min(mipmap(), max_mipmap_count);
+			u16 result = std::min(mipmap(), max_mipmap_count);
+
+			if (result == 0)
+				result = 1;
+
+			return result;
 		}
 		u16 max_mipmap_count = static_cast<u16>(floor(log2(std::max(width(), height()))) + 1);
 		return std::min(mipmap(), max_mipmap_count);

@@ -18,6 +18,7 @@ namespace rsx
 	enum class draw_command
 	{
 		none,
+		inlined_index_array,
 		array,
 		inlined_array,
 		indexed,
@@ -29,6 +30,8 @@ namespace rsx
 		draw_command command;
 
 		std::vector<u32> inline_vertex_array;
+
+		std::vector<u16> inline_index_array;
 
 		/**
 		* Stores the first and count argument from draw/draw indexed parameters between begin/end clauses.

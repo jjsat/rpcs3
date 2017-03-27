@@ -264,6 +264,7 @@ namespace rsx
 		virtual u64 timestamp() const;
 		virtual bool on_access_violation(u32 address, bool is_writing) { return false; }
 
+		gsl::span<const gsl::byte> get_immediate_index_array() const;
 		gsl::span<const gsl::byte> get_raw_index_array(const std::vector<std::pair<u32, u32> >& draw_indexed_clause) const;
 		gsl::span<const gsl::byte> get_raw_vertex_buffer(const rsx::data_array_format_info&, u32 base_offset, const std::vector<std::pair<u32, u32>>& vertex_ranges) const;
 

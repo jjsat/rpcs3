@@ -227,6 +227,13 @@ namespace rsx
 			rsx::method_registers.current_draw_clause.inline_vertex_array.push_back(arg);
 		}
 
+		void add_array_element16(thread* rsx, u32 _reg, u32 arg)
+		{
+			rsx::method_registers.current_draw_clause.command = rsx::draw_command::inlined_index_array;
+			rsx::method_registers.current_draw_clause.inline_index_array.push_back((arg & 0xFF) << 8);
+			rsx::method_registers.current_draw_clause.inline_index_array.push_back((arg >> 16) << 8);
+		}
+
 		template<u32 index>
 		struct set_transform_constant
 		{
@@ -267,6 +274,11 @@ namespace rsx
 			{
 				rsx::method_registers.current_draw_clause.command = rsx::draw_command::array;
 				rsx::method_registers.current_draw_clause.first_count_commands.push_back(std::make_pair(0, push_buffer_vertices_count));
+			}
+
+			if (rsx::method_registers.current_draw_clause.command == rsx::draw_command::inlined_index_array)
+			{
+				rsx::method_registers.current_draw_clause.first_count_commands.push_back(std::make_pair(0, rsx::method_registers.current_draw_clause.inline_index_array.size()));
 			}
 
 			if (!(rsx::method_registers.current_draw_clause.first_count_commands.empty() &&
@@ -1291,6 +1303,7 @@ namespace rsx
 		bind<NV4097_DRAW_INDEX_ARRAY, nv4097::draw_index_array>();
 		bind<NV4097_INLINE_ARRAY, nv4097::draw_inline_array>();
 		bind_range<NV4097_SET_VERTEX_DATA_SCALED4S_M, 1, 32, nv4097::set_vertex_data_scaled4s_m>();
+		bind<NV4097_ARRAY_ELEMENT16, nv4097::add_array_element16>();
 		bind_range<NV4097_SET_VERTEX_DATA4UB_M, 1, 16, nv4097::set_vertex_data4ub_m>();
 		bind_range<NV4097_SET_VERTEX_DATA1F_M, 1, 16, nv4097::set_vertex_data1f_m>();
 		bind_range<NV4097_SET_VERTEX_DATA2F_M, 1, 32, nv4097::set_vertex_data2f_m>();

@@ -329,6 +329,7 @@ namespace rsx
 	void thread::begin()
 	{
 		rsx::method_registers.current_draw_clause.inline_vertex_array.clear();
+		rsx::method_registers.current_draw_clause.inline_index_array.clear();
 		in_begin_end = true;
 	}
 
@@ -649,6 +650,17 @@ namespace rsx
 		return get_system_time() * 1000;
 	}
 
+
+	gsl::span<const gsl::byte> thread::get_immediate_index_array() const
+	{
+		u32 count = rsx::method_registers.current_draw_clause.inline_index_array.size();
+		const gsl::byte* ptr = static_cast<const gsl::byte*>((void*)&rsx::method_registers.current_draw_clause.inline_index_array[0]);
+
+		u32 size = sizeof(rsx::method_registers.current_draw_clause.inline_index_array[0]);
+
+		return{ ptr, count * size };
+	}
+
 	gsl::span<const gsl::byte> thread::get_raw_index_array(const std::vector<std::pair<u32, u32> >& draw_indexed_clause) const
 	{
 		u32 address = rsx::get_address(rsx::method_registers.index_array_address(), rsx::method_registers.index_array_location());
@@ -755,6 +767,13 @@ namespace rsx
 			return draw_inlined_array{
 				rsx::method_registers.current_draw_clause.inline_vertex_array};
 		}
+
+		if (rsx::method_registers.current_draw_clause.command == rsx::draw_command::inlined_index_array) {
+			return draw_indexed_array_command{
+				rsx::method_registers.current_draw_clause.first_count_commands,
+				get_immediate_index_array() };
+		}
+
 
 		fmt::throw_exception("ill-formed draw command" HERE);
 	}

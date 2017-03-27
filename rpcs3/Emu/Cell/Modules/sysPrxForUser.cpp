@@ -70,8 +70,8 @@ void sys_initialize_tls(ppu_thread& ppu, u64 main_thread_id, u32 tls_seg_addr, u
 	s_tls_file = tls_seg_size;
 	s_tls_zero = tls_mem_size - tls_seg_size;
 	s_tls_size = tls_mem_size + 0x30; // 0x30 is system area size
-	s_tls_area = vm::alloc(0x20000, vm::main) + 0x30;
-	s_tls_max = (0xffd0 / s_tls_size) + (0x10000 / s_tls_size);
+	s_tls_area = vm::alloc(0x200000, vm::main) + 0x30;
+	s_tls_max = (0xfffd0 / s_tls_size) + (0x100000 / s_tls_size);
 	s_tls_map = std::make_unique<atomic_t<bool>[]>(s_tls_max);
 
 	// Allocate TLS for main thread

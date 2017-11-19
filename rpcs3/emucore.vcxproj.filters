@@ -1807,5 +1807,8 @@
     <ClInclude Include="Emu\Cell\lv2\sys_net.h">
       <Filter>Emu\Cell\lv2</Filter>
     </ClInclude>
+    <ClInclude Include="Emu\RSX\Overlays.h">
+      <Filter>Emu\GPU\RSX</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

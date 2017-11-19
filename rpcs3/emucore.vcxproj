@@ -652,6 +652,7 @@
     <ClInclude Include="Emu\RSX\Common\texture_cache.h" />
     <ClInclude Include="Emu\RSX\gcm_enums.h" />
     <ClInclude Include="Emu\RSX\gcm_printing.h" />
+    <ClInclude Include="Emu\RSX\Overlays.h" />
     <ClInclude Include="Emu\RSX\rsx_cache.h" />
     <ClInclude Include="Emu\RSX\rsx_decode.h" />
     <ClInclude Include="Emu\RSX\rsx_trace.h" />

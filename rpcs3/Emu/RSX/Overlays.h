@@ -10,8 +10,6 @@ namespace rsx
 {
 	namespace overlays
 	{
-		void render_text(struct overlay_element& element);
-
 		struct overlay_element
 		{
 			u16 x = 0;
@@ -124,29 +122,22 @@ namespace rsx
 		//Controls
 		struct spacer : public overlay_element
 		{
+			using overlay_element::overlay_element;
 		};
 
 		struct image_view : public overlay_element
 		{
+			using overlay_element::overlay_element;
 		};
 
 		struct button : public overlay_element
 		{
-
+			using overlay_element::overlay_element;
 		};
 
 		struct label : public overlay_element
 		{
-			bool rendered = false;
-
-			void render() override
-			{
-				if (!rendered)
-				{
-					render_text(*this);
-					rendered = true;
-				}
-			}
+			using overlay_element::overlay_element;
 		};
 
 		struct list_view : private vertical_layout
@@ -196,6 +187,12 @@ namespace rsx
 				m_scroll_indicator_bottom->render();
 				m_accept_btn->render();
 				m_cancel_btn->render();
+			}
+
+			list_view(const char* title, u16 width, u16 height, u16 entry_height)
+			{
+				std::string s = title;
+				list_view(s, width, height, entry_height);
 			}
 
 			void scroll_down()

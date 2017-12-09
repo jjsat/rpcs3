@@ -10,6 +10,23 @@ namespace rsx
 {
 	namespace overlays
 	{
+		struct vertex
+		{
+			float values[4];
+		};
+
+		struct compiled_resource
+		{
+			std::vector<std::pair<u64, std::vector<vertex>>> draw_commands;
+
+			void add(compiled_resource& other)
+			{
+				auto old_size = draw_commands.size();
+				draw_commands.resize(old_size + other.draw_commands.size());
+				std::copy(other.draw_commands.begin(), other.draw_commands.end(), draw_commands.begin() + old_size);
+			}
+		};
+
 		struct overlay_element
 		{
 			u16 x = 0;
@@ -21,7 +38,7 @@ namespace rsx
 
 			int font_size;
 			std::string font_face;
-			std::vector<u8> memory_resource;
+			std::vector<vertex> memory_resource;
 
 			overlay_element() {}
 			overlay_element(u16 _w, u16 _h) : w(_w), h(_h) {}
@@ -46,6 +63,11 @@ namespace rsx
 				w *= _x;
 				h *= _y;
 			}
+
+			virtual compiled_resource get_compiled()
+			{
+				return{};
+			}
 		};
 
 		struct animation_base
@@ -63,6 +85,15 @@ namespace rsx
 			std::vector<std::unique_ptr<overlay_element>> m_items;
 
 			virtual overlay_element* add_element(std::unique_ptr<overlay_element>&, int = -1) = 0;
+
+			compiled_resource get_compiled() override
+			{
+				compiled_resource result;
+				for (auto &itm : m_items)
+					result.add(itm->get_compiled());
+
+				return result;
+			}
 		};
 
 		struct user_interface
@@ -71,6 +102,7 @@ namespace rsx
 			u16 virtual_height = 720;
 
 			virtual void on_button_pressed(u32 button);
+			virtual compiled_resource get_compiled();
 		};
 
 		struct vertical_layout : public layout_container
@@ -140,7 +172,7 @@ namespace rsx
 			using overlay_element::overlay_element;
 		};
 
-		struct list_view : private vertical_layout
+		struct list_view : public vertical_layout
 		{
 		private:
 			label *m_header_view;
@@ -249,6 +281,11 @@ namespace rsx
 				m_display.text = current_fps;
 				m_display.render();
 			}
+
+			compiled_resource get_compiled() override
+			{
+				return m_display.get_compiled();
+			}
 		};
 
 		struct save_dialog : public user_interface
@@ -284,7 +321,14 @@ namespace rsx
 				//TODO
 			}
 
-			//TODO: Implement proper iterator
+			compiled_resource get_compiled() override
+			{
+				compiled_resource result;
+				result.add(m_list->get_compiled());
+				result.add(m_description->get_compiled());
+				result.add(m_time_thingy->get_compiled());
+				return result;
+			}
 		};
 	}
 }

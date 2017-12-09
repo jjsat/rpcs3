@@ -330,5 +330,17 @@ namespace rsx
 				return result;
 			}
 		};
+
+		struct resource_config
+		{
+			//Define resources
+			std::vector<std::string> texture_resource_files;
+
+			resource_config()
+			{
+				texture_resource_files.push_back("cross.png");
+				texture_resource_files.push_back("circle.png");
+			}
+		};
 	}
 }

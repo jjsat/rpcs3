@@ -13,6 +13,52 @@ namespace rsx
 		struct vertex
 		{
 			float values[4];
+
+			vertex() {}
+
+			vertex(float x, float y)
+			{
+				vec2(x, y);
+			}
+
+			vertex(float x, float y, float z)
+			{
+				vec3(x, y, z);
+			}
+
+			vertex(float x, float y, float z, float w)
+			{
+				vec4(x, y, z, w);
+			}
+
+			float& operator[](int index)
+			{
+				return values[index];
+			}
+
+			void vec2(float x, float y)
+			{
+				values[0] = x;
+				values[1] = y;
+				values[2] = 0.f;
+				values[3] = 1.f;
+			}
+
+			void vec3(float x, float y, float z)
+			{
+				values[0] = x;
+				values[1] = y;
+				values[2] = z;
+				values[3] = 1.f;
+			}
+
+			void vec4(float x, float y, float z, float w)
+			{
+				values[0] = x;
+				values[1] = y;
+				values[2] = z;
+				values[3] = w;
+			}
 		};
 
 		struct compiled_resource
@@ -36,9 +82,11 @@ namespace rsx
 
 			std::string text;
 
-			int font_size;
+			int font_size = 14;
 			std::string font_face;
-			std::vector<vertex> memory_resource;
+
+			compiled_resource compiled_resources;
+			bool is_compiled = false;
 
 			overlay_element() {}
 			overlay_element(u16 _w, u16 _h) : w(_w), h(_h) {}
@@ -46,27 +94,105 @@ namespace rsx
 			//Draw into image resource
 			virtual void render() {}
 
-			virtual void translate(u16 _x, u16 _y)
+			virtual void translate(s16 _x, s16 _y)
 			{
-				x += _x;
-				y += _y;
+				x = (u16)(x + _x);
+				y = (u16)(y + _y);
+
+				is_compiled = false;
 			}
 
 			virtual void scale(f32 _x, f32 _y, bool origin_scaling)
 			{
 				if (origin_scaling)
 				{
-					x *= _x;
-					y *= _y;
+					x = (u16)(_x * x);
+					y = (u16)(_y * y);
 				}
 
-				w *= _x;
-				h *= _y;
+				w = (u16)(_x * w);
+				h = (u16)(_y * h);
+
+				is_compiled = false;
+			}
+
+			virtual void set_pos(u16 _x, u16 _y)
+			{
+				x = _x;
+				y = _y;
+
+				is_compiled = false;
+			}
+
+			virtual void set_size(u16 _w, u16 _h)
+			{
+				w = _w;
+				h = _h;
+
+				is_compiled = false;
+			}
+
+			virtual std::vector<vertex> render_text(const char *string, f32 x, f32 y, f32 font_w, f32 font_h)
+			{
+				std::vector<vertex> result;
+				int index = 0;
+				f32 x_loc = x;
+				bool first = true;
+
+				while (true)
+				{
+					char c = string[index++];
+					if (!c) break;
+
+					//TODO: Glyph metrics
+					if (first)
+					{
+						result.push_back({ x_loc, y + font_h });
+						result.push_back({ x_loc, y });
+						result.push_back({ x_loc + font_w, y + font_h });
+						result.push_back({ x_loc + font_w, y });
+
+						first = false;
+					}
+					else
+					{
+						//Stripify
+						result.push_back({ x_loc + font_w, y + font_h });
+						result.push_back({ x_loc + font_w, y});
+					}
+
+					x_loc += font_w;;
+				}
+
+				return result;
 			}
 
 			virtual compiled_resource get_compiled()
 			{
-				return{};
+				if (!is_compiled)
+				{
+					compiled_resources = {};
+					compiled_resources.draw_commands.push_back({});
+
+					auto& verts = compiled_resources.draw_commands.front().second;
+					verts.resize(4);
+					verts[0].vec2(x, y);
+					verts[1].vec2(x + w, y);
+					verts[2].vec2(x, y + h);
+					verts[3].vec2(x + w, y + h);
+
+					if (!text.empty())
+					{
+						compiled_resources.draw_commands.push_back({});
+						f32 font_height = (f32)font_size * 1.3333f;
+						f32 font_width = font_height * 0.5f;
+						compiled_resources.draw_commands.back().second = render_text(text.c_str(), x + 15, y + 5, font_width, font_height);
+					}
+
+					is_compiled = true;
+				}
+
+				return compiled_resources;
 			}
 		};
 
@@ -86,13 +212,34 @@ namespace rsx
 
 			virtual overlay_element* add_element(std::unique_ptr<overlay_element>&, int = -1) = 0;
 
+			void translate(s16 _x, s16 _y) override
+			{
+				overlay_element::translate(_x, _y);
+
+				for (auto &itm : m_items)
+					itm->translate(_x, _y);
+			}
+
+			void set_pos(u16 _x, u16 _y) override
+			{
+				s16 dx = (s16)(_x - x);
+				s16 dy = (s16)(_y - y);
+				translate(dx, dy);
+			}
+
 			compiled_resource get_compiled() override
 			{
-				compiled_resource result;
-				for (auto &itm : m_items)
-					result.add(itm->get_compiled());
+				if (!is_compiled)
+				{
+					compiled_resource result = overlay_element::get_compiled();
 
-				return result;
+					for (auto &itm : m_items)
+						result.add(itm->get_compiled());
+
+					compiled_resources = result;
+				}
+
+				return compiled_resources;
 			}
 		};
 
@@ -101,8 +248,8 @@ namespace rsx
 			u16 virtual_width = 1280;
 			u16 virtual_height = 720;
 
-			virtual void on_button_pressed(u32 button);
-			virtual compiled_resource get_compiled();
+			virtual void on_button_pressed(u32 button) = 0;
+			virtual compiled_resource get_compiled() = 0;
 		};
 
 		struct vertical_layout : public layout_container
@@ -175,12 +322,10 @@ namespace rsx
 		struct list_view : public vertical_layout
 		{
 		private:
-			label *m_header_view;
-
-			image_view *m_scroll_indicator_top;
-			image_view *m_scroll_indicator_bottom;
-			button *m_cancel_btn;
-			button *m_accept_btn;
+			std::unique_ptr<image_view> m_scroll_indicator_top;
+			std::unique_ptr<image_view> m_scroll_indicator_bottom;
+			std::unique_ptr<button> m_cancel_btn;
+			std::unique_ptr<button> m_accept_btn;
 
 			u16 m_scroll_offset = 0;
 			u16 m_entry_height = 16;
@@ -189,42 +334,26 @@ namespace rsx
 			u16 m_elements_count;
 		
 		public:
-			list_view(std::string& title, u16 width, u16 height, u16 entry_height)
+			list_view(u16 width, u16 height, u16 entry_height)
 			{
 				m_entry_height = entry_height;
 				w = width;
 				h = height;
 
-				std::unique_ptr<overlay_element> header = std::make_unique<label>(width, 40);
-				header->text = title;
-				header->font_size = 16;
-				header->font_face = "Arial Bold";
+				m_scroll_indicator_top = std::make_unique<image_view>(width, 5);
+				m_scroll_indicator_bottom = std::make_unique<image_view>(width, 5);
+				m_accept_btn = std::make_unique<button>(120, 20);
+				m_cancel_btn = std::make_unique<button>(120, 20);
 
-				m_header_view = static_cast<label*>(add_element(header));
-				m_header_view->render();
+				m_scroll_indicator_top->set_size(width, 20);
+				m_scroll_indicator_bottom->set_size(width, 20);
+				m_accept_btn->set_size(120, 30);
+				m_cancel_btn->set_size(120, 30);
 
-				std::unique_ptr<overlay_element> top_indicator = std::make_unique<image_view>(width, 5);
-				std::unique_ptr<overlay_element> bottom_indicator = std::make_unique<image_view>(width, 5);
-				std::unique_ptr<overlay_element> accept = std::make_unique<button>(120, 20);
-				std::unique_ptr<overlay_element> cancel = std::make_unique<button>(120, 20);
-
-				m_scroll_indicator_top = static_cast<image_view*>(add_element(top_indicator));
-				m_scroll_indicator_bottom = static_cast<image_view*>(add_element(bottom_indicator));
-				m_cancel_btn = static_cast<button*>(add_element(cancel));
-				m_accept_btn = static_cast<button*>(add_element(accept));
-
-				//TODO: Add X icon to accept and O to cancel
-				//TODO: Add ^ icon to indicator top and V to indicator bottom
-				m_scroll_indicator_top->render();
-				m_scroll_indicator_bottom->render();
-				m_accept_btn->render();
-				m_cancel_btn->render();
-			}
-
-			list_view(const char* title, u16 width, u16 height, u16 entry_height)
-			{
-				std::string s = title;
-				list_view(s, width, height, entry_height);
+				m_scroll_indicator_top->translate(0, -20);
+				m_scroll_indicator_bottom->set_pos(0, height);
+				m_accept_btn->set_pos(0, height + 30);
+				m_cancel_btn->set_pos(150, height + 30);
 			}
 
 			void scroll_down()
@@ -264,6 +393,31 @@ namespace rsx
 
 				return m_items[m_selected_entry + 2]->text;
 			}
+
+			void translate(s16 _x, s16 _y) override
+			{
+				layout_container::translate(_x, _y);
+				m_scroll_indicator_top->translate(_x, _y);
+				m_scroll_indicator_bottom->translate(_x, _y);
+				m_accept_btn->translate(_x, _y);
+				m_cancel_btn->translate(_x, _y);
+			}
+
+			compiled_resource get_compiled()
+			{
+				if (!is_compiled)
+				{
+					auto compiled = layout_container::get_compiled();
+					compiled.add(m_scroll_indicator_top->get_compiled());
+					compiled.add(m_scroll_indicator_bottom->get_compiled());
+					compiled.add(m_accept_btn->get_compiled());
+					compiled.add(m_cancel_btn->get_compiled());
+
+					compiled_resources = compiled;
+				}
+
+				return compiled_resources;
+			}
 		};
 
 		struct fps_display : user_interface
@@ -296,17 +450,21 @@ namespace rsx
 
 			save_dialog()
 			{
-				m_list = std::make_unique<list_view>("Save Dialog", 320, 400, 16);
+				m_list = std::make_unique<list_view>(1240, 500, 16);
 				m_description = std::make_unique<label>();
 				m_time_thingy = std::make_unique<label>();
 
+				m_list->set_pos(20, 120);
+
 				m_description->font_face = "Arial";
-				m_description->font_size = 14;
-				m_description->text = "Save Entry 0";
+				m_description->font_size = 20;
+				m_description->set_pos(20, 50);
+				m_description->text = "Save Dialog";
 				m_description->render();
 
 				m_time_thingy->font_face = "Arial";
 				m_time_thingy->font_size = 11;
+				m_time_thingy->set_pos(1000, 20);
 				m_time_thingy->text = "Sat, Jan 01, 00: 00: 00 GMT";
 				m_time_thingy->render();
 			}

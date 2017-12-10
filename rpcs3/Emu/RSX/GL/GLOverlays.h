@@ -22,6 +22,9 @@ namespace gl
 
 		bool compiled = false;
 
+		u32 num_drawable_elements = 4;
+		GLenum primitives = GL_TRIANGLE_STRIP;
+
 		void create()
 		{
 			if (!compiled)
@@ -80,9 +83,21 @@ namespace gl
 		virtual void bind_resources() {}
 		virtual void cleanup_resources() {}
 
+		virtual void upload_vertex_data(f32* data, u32 elements_count)
+		{
+			elements_count <<= 2;
+			m_vertex_data_buffer.data(elements_count, data);
+		}
+
 		virtual void emit_geometry()
 		{
-			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+			int old_vao;
+			glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &old_vao);
+
+			m_vao.bind();
+			glDrawArrays(primitives, 0, num_drawable_elements);
+
+			glBindVertexArray(old_vao);
 		}
 
 		virtual void run(u16 w, u16 h, GLuint target_texture, bool depth_target)
@@ -100,22 +115,25 @@ namespace gl
 			GLboolean color_writes[4];
 			GLboolean depth_write;
 
-			glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
-			glBindFramebuffer(GL_FRAMEBUFFER, fbo.id());
-
-			if (depth_target)
+			if (target_texture)
 			{
-				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, target_texture, 0);
-				glDrawBuffer(GL_NONE);
-			}
-			else
-			{
-				GLenum buffer = GL_COLOR_ATTACHMENT0;
-				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target_texture, 0);
-				glDrawBuffers(1, &buffer);
+				glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
+				glBindFramebuffer(GL_FRAMEBUFFER, fbo.id());
+
+				if (depth_target)
+				{
+					glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, target_texture, 0);
+					glDrawBuffer(GL_NONE);
+				}
+				else
+				{
+					GLenum buffer = GL_COLOR_ATTACHMENT0;
+					glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target_texture, 0);
+					glDrawBuffers(1, &buffer);
+				}
 			}
 
-			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
+			if (!target_texture || glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
 			{
 				// Push rasterizer state
 				glGetIntegerv(GL_VIEWPORT, viewport);
@@ -151,12 +169,16 @@ namespace gl
 				emit_geometry();
 
 				// Clean up
-				if (depth_target)
-					glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
-				else
-					glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+				if (target_texture)
+				{
+					if (depth_target)
+						glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
+					else
+						glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
 
-				glBindFramebuffer(GL_FRAMEBUFFER, old_fbo);
+					glBindFramebuffer(GL_FRAMEBUFFER, old_fbo);
+				}
+
 				glUseProgram((GLuint)program);
 
 				glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
@@ -305,6 +327,7 @@ namespace gl
 
 	struct ui_overlay_debug : public overlay_pass
 	{
+		u32 num_elements = 0;
 		ui_overlay_debug()
 		{
 			vs_src =
@@ -312,35 +335,46 @@ namespace gl
 				"#version 420\n\n"
 				"layout(location=0) in vec4 in_pos;\n"
 				"layout(location=0) out vec2 tc0;\n"
-				"uniform vec4 ui_scale_parameters;\n"
+				"uniform vec4 ui_scale;\n"
 				"\n"
 				"void main()\n"
 				"{\n"
-				"	const vec2 offsets[] = {vec2(0., 0.), vec2(1., 0.), vec2(1., 1.), vec2(0., 1.)};\n"
-				"	vec2 pos = offsets[gl_VertexID % 4] * ui_scale_parameters.xy;\n"
+				"	const vec2 offsets[] = {vec2(0., 0.), vec2(1., 0.), vec2(0., 1.), vec2(1., 1.)};\n"
 				"	tc0 = offsets[gl_VertexID % 4];\n"
-				"	gl_Position = vec4(pos, 0., 1.);\n"
+				"	vec4 pos = in_pos / ui_scale;\n"
+				"	pos.y = (1. - pos.y);\n"
+				"	gl_Position = (pos + pos) - 1.;\n"
 				"}\n"
 			};
 
 			fs_src =
 			{
 				"#version 420\n\n"
-				"layout(binding=31) uniform sampler2D fs0;\n"
+				"//layout(binding=31) uniform sampler2D fs0;\n"
 				"layout(location=0) in vec2 tc0;\n"
 				"layout(location=0) out vec4 ocol;\n"
 				"\n"
 				"void main()\n"
 				"{\n"
-				"	ocol = texture(fs0, tc0).xxxx;\n"
+				"	//ocol = texture(fs0, tc0).xxxx;\n"
+				"	if (tc0.x < 0.05 || tc0.y < 0.05 ||\n"
+				"		tc0.x > 0.95 || tc0.y > 0.95)\n"
+				"		ocol = vec4(1.);\n"
+				"	else\n"
+				"		ocol = vec4(0.);\n"
 				"}\n"
 			};
 		}
 
 		void run(u16 w, u16 h, GLuint target, rsx::overlays::user_interface& ui)
 		{
-			//Set up vaos, etc
-			overlay_pass::run(w, h, target, false);
+			glProgramUniform4f(program_handle.id(), program_handle.uniforms["ui_scale"].location(), (f32)ui.virtual_width, (f32)ui.virtual_height, 1.f, 1.f);
+			for (auto &cmd : ui.get_compiled().draw_commands)
+			{
+				upload_vertex_data((f32*)cmd.second.data(), cmd.second.size() * 4);
+				num_drawable_elements = cmd.second.size();
+				overlay_pass::run(w, h, target, false);
+			}
 		}
 	};
 }

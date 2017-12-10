@@ -294,6 +294,7 @@ private:
 
 	gl::text_writer m_text_printer;
 	gl::depth_convert_pass m_depth_converter;
+	gl::ui_overlay_debug m_ui_renderer;
 
 	std::mutex queue_guard;
 	std::list<work_item> work_queue;

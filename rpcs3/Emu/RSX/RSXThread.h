@@ -12,6 +12,7 @@
 #include "RSXFragmentProgram.h"
 #include "rsx_methods.h"
 #include "rsx_utils.h"
+#include "Overlays.h"
 #include <Utilities/GSL.h>
 
 #include "Utilities/Thread.h"
@@ -230,6 +231,8 @@ namespace rsx
 		rsx::gcm_framebuffer_info m_depth_surface_info;
 		bool framebuffer_status_valid = false;
 
+		std::shared_ptr<rsx::overlays::user_interface> m_custom_ui;
+
 	public:
 		RsxDmaControl* ctrl = nullptr;
 		atomic_t<u32> internal_get{ 0 };
@@ -419,6 +422,8 @@ namespace rsx
 	public:
 		//std::future<void> add_internal_task(std::function<bool()> callback);
 		//void invoke(std::function<bool()> callback);
+		void add_user_interface(std::shared_ptr<rsx::overlays::user_interface> iface);
+		void remove_user_interface();
 
 		/**
 		 * Fill buffer with 4x4 scale offset matrix.

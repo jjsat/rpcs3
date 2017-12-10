@@ -32,6 +32,7 @@ GLGSRender::GLGSRender() : GSRender()
 		m_vertex_cache.reset(new gl::weak_vertex_cache());
 
 	supports_multidraw = !g_cfg.video.strict_rendering_mode;
+	m_custom_ui.reset(new rsx::overlays::save_dialog());
 }
 
 extern CellGcmContextData current_context;
@@ -756,6 +757,7 @@ void GLGSRender::on_init_thread()
 	glEnable(GL_CLIP_DISTANCE0 + 5);
 
 	m_depth_converter.create();
+	m_ui_renderer.create();
 
 	m_gl_texture_cache.initialize();
 	m_thread_id = std::this_thread::get_id();
@@ -826,6 +828,7 @@ void GLGSRender::on_exit()
 	m_text_printer.close();
 	m_gl_texture_cache.destroy();
 	m_depth_converter.destroy();
+	m_ui_renderer.destroy();
 
 	for (u32 i = 0; i < occlusion_query_count; ++i)
 	{
@@ -1253,6 +1256,13 @@ void GLGSRender::flip(int buffer)
 	areai screen_area = coordi({}, { (int)buffer_width, (int)buffer_height });
 	gl::screen.clear(gl::buffers::color);
 	m_flip_fbo.blit(gl::screen, screen_area, areai(aspect_ratio).flipped_vertical(), gl::buffers::color, gl::filter::linear);
+
+	if (m_custom_ui)
+	{
+		gl::screen.bind();
+		glViewport(0, 0, m_frame->client_width(), m_frame->client_height());
+		m_ui_renderer.run(buffer_width, buffer_height, 0, *m_custom_ui.get());
+	}
 
 	if (g_cfg.video.overlay)
 	{

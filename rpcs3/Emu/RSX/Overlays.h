@@ -6,6 +6,10 @@
 #include <vector>
 #include <memory>
 
+// STB_IMAGE_IMPLEMENTATION defined externally
+#include <stb_image.h>
+#include <stb_truetype.h>
+
 namespace rsx
 {
 	namespace overlays
@@ -73,6 +77,182 @@ namespace rsx
 			}
 		};
 
+		struct font
+		{
+			const u32 size = 40;
+			const u32 width = 1024;
+			const u32 height = 1024;
+			const u32 oversample = 2;
+			const u32 char_count = 256; //16x16
+
+			bool initialized = false;
+			std::string font_name;
+			std::vector<stbtt_packedchar> pack_info;
+			std::vector<u8> glyph_data;
+
+			font(const char *ttf_name)
+			{
+				//Init glyph
+				std::vector<u8> bytes;
+				fs::file f(std::string("C:/Windows/Fonts/") + ttf_name + ".ttf");
+				f.read(bytes, f.size());
+
+				glyph_data.resize(width * height);
+				pack_info.resize(256);
+
+				stbtt_pack_context context;
+				if (!stbtt_PackBegin(&context, glyph_data.data(), width, height, 0, 1, nullptr))
+				{
+					LOG_ERROR(RSX, "Font packing failed");
+					return;
+				}
+
+				stbtt_PackSetOversampling(&context, oversample, oversample);
+				if (!stbtt_PackFontRange(&context, bytes.data(), 0, size, 0, 256, pack_info.data()))
+				{
+					LOG_ERROR(RSX, "Font packing failed");
+					return;
+				}
+
+				stbtt_PackEnd(&context);
+
+				font_name = ttf_name;
+				initialized = true;
+			}
+
+			stbtt_aligned_quad get_char(char c, f32 &x_advance, f32 &y_advance)
+			{
+				stbtt_aligned_quad quad;
+				stbtt_GetPackedQuad(pack_info.data(), width, height, c, &x_advance, &y_advance, &quad, true);
+				return quad;
+			}
+
+			std::vector<vertex> render_text(const char *text)
+			{
+				if (!initialized)
+				{
+					return{};
+				}
+
+				std::vector<vertex> result;
+
+				int i = 0;
+				f32 x_advance, y_advance;
+
+				while (true)
+				{
+					if (char c = text[i++])
+					{
+						auto quad = get_char(c, x_advance, y_advance);
+						result.push_back({ quad.x0, quad.y0, quad.s0, quad.t0 });
+						result.push_back({ quad.x1, quad.y0, quad.s1, quad.t0 });
+						result.push_back({ quad.x0, quad.y1, quad.s0, quad.t1 });
+						result.push_back({ quad.x1, quad.y1, quad.s1, quad.t1 });
+					}
+					else
+					{
+						break;
+					}
+				}
+
+				return result;
+			}
+		};
+
+		//TODO: Singletons are cancer
+		class fontmgr
+		{
+		private:
+			std::vector<std::unique_ptr<font>> fonts;
+			static fontmgr *m_instance;
+
+			font* find(const char *name, int size)
+			{
+				for (auto &f : fonts)
+				{
+					if (f->font_name == name)
+						return f.get();
+				}
+
+				fonts.push_back(std::make_unique<font>(name));
+				return fonts.back().get();
+			}
+
+		public:
+
+			fontmgr() {}
+			~fontmgr()
+			{
+				if (m_instance)
+				{
+					delete m_instance;
+					m_instance = nullptr;
+				}
+			}
+
+			static font* get(const char *name, int size)
+			{
+				if (m_instance == nullptr)
+					m_instance = new fontmgr;
+
+				return m_instance->find(name, size);
+			}
+		};
+
+		struct resource_config
+		{
+			struct image_info
+			{
+				int w = 0, h = 0;
+				int bpp = 0;
+				u8* data = nullptr;
+
+				image_info(image_info&) = delete;
+
+				image_info(const char* filename)
+				{
+					std::vector<u8> bytes;
+					fs::file f(filename);
+					f.read(bytes, f.size());
+					data = stbi_load_from_memory(bytes.data(), f.size(), &w, &h, &bpp, STBI_rgb_alpha);
+				}
+
+				~image_info()
+				{
+					stbi_image_free(data);
+					data = nullptr;
+					w = h = bpp = 0;
+				}
+			};
+
+			//Define resources
+			std::vector<std::string> texture_resource_files;
+			std::vector<std::unique_ptr<image_info>> texture_raw_data;
+
+			resource_config()
+			{
+				texture_resource_files.push_back("arrow_up.png");
+				texture_resource_files.push_back("arrow_down.png");
+				texture_resource_files.push_back("scroll_indicator.png");
+				texture_resource_files.push_back("cross.png");
+				texture_resource_files.push_back("circle.png");
+			}
+
+			void load_files()
+			{
+				for (const auto &res : texture_resource_files)
+				{
+					auto info = std::make_unique<image_info>(("Icons/ui/" + res).c_str());
+					texture_raw_data.push_back(std::move(info));
+				}
+			}
+
+			void free_resources()
+			{
+				texture_raw_data.clear();
+			}
+		};
+
 		struct overlay_element
 		{
 			u16 x = 0;
@@ -81,9 +261,7 @@ namespace rsx
 			u16 h = 0;
 
 			std::string text;
-
-			int font_size = 14;
-			std::string font_face;
+			font* font;
 
 			compiled_resource compiled_resources;
 			bool is_compiled = false;
@@ -132,36 +310,17 @@ namespace rsx
 				is_compiled = false;
 			}
 
-			virtual std::vector<vertex> render_text(const char *string, f32 x, f32 y, f32 font_w, f32 font_h)
+			virtual std::vector<vertex> render_text(const char *string, f32 x, f32 y)
 			{
-				std::vector<vertex> result;
-				int index = 0;
-				f32 x_loc = x;
-				bool first = true;
+				auto renderer = font;
+				if (!renderer) renderer = fontmgr::get("Arial", 11);
 
-				while (true)
+				std::vector<vertex> result = renderer->render_text(string);
+				for (auto &v : result)
 				{
-					char c = string[index++];
-					if (!c) break;
-
-					//TODO: Glyph metrics
-					if (first)
-					{
-						result.push_back({ x_loc, y + font_h });
-						result.push_back({ x_loc, y });
-						result.push_back({ x_loc + font_w, y + font_h });
-						result.push_back({ x_loc + font_w, y });
-
-						first = false;
-					}
-					else
-					{
-						//Stripify
-						result.push_back({ x_loc + font_w, y + font_h });
-						result.push_back({ x_loc + font_w, y});
-					}
-
-					x_loc += font_w;;
+					//Apply transform
+					v.values[0] += x;
+					v.values[1] += y;
 				}
 
 				return result;
@@ -184,9 +343,7 @@ namespace rsx
 					if (!text.empty())
 					{
 						compiled_resources.draw_commands.push_back({});
-						f32 font_height = (f32)font_size * 1.3333f;
-						f32 font_width = font_height * 0.5f;
-						compiled_resources.draw_commands.back().second = render_text(text.c_str(), x + 15, y + 5, font_width, font_height);
+						compiled_resources.draw_commands.back().second = render_text(text.c_str(), x + 15, y + 5);
 					}
 
 					is_compiled = true;
@@ -372,8 +529,7 @@ namespace rsx
 			{
 				std::unique_ptr<overlay_element> entry = std::make_unique<label>(w, m_entry_height);
 				entry->text = text;
-				entry->font_size = 12;
-				entry->font_face = "Arial";
+				entry->font = fontmgr::get("Arial", 12);
 				entry->render();
 
 				add_element(entry, m_elements_count + 2);
@@ -456,14 +612,12 @@ namespace rsx
 
 				m_list->set_pos(20, 120);
 
-				m_description->font_face = "Arial";
-				m_description->font_size = 20;
+				m_description->font = fontmgr::get("Arial", 20);
 				m_description->set_pos(20, 50);
 				m_description->text = "Save Dialog";
 				m_description->render();
 
-				m_time_thingy->font_face = "Arial";
-				m_time_thingy->font_size = 11;
+				m_time_thingy->font = fontmgr::get("Arial", 11);
 				m_time_thingy->set_pos(1000, 20);
 				m_time_thingy->text = "Sat, Jan 01, 00: 00: 00 GMT";
 				m_time_thingy->render();
@@ -486,18 +640,6 @@ namespace rsx
 				result.add(m_description->get_compiled());
 				result.add(m_time_thingy->get_compiled());
 				return result;
-			}
-		};
-
-		struct resource_config
-		{
-			//Define resources
-			std::vector<std::string> texture_resource_files;
-
-			resource_config()
-			{
-				texture_resource_files.push_back("cross.png");
-				texture_resource_files.push_back("circle.png");
 			}
 		};
 	}

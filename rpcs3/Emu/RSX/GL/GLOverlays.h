@@ -315,6 +315,11 @@ namespace gl
 			};
 		}
 
+		void load_config()
+		{
+
+		}
+
 		void run(u16 w, u16 h, GLuint target, GLuint source, rsx::overlays::user_interface& ui)
 		{
 			glActiveTexture(GL_TEXTURE31);
@@ -328,7 +333,9 @@ namespace gl
 	struct ui_overlay_debug : public overlay_pass
 	{
 		u32 num_elements = 0;
-		ui_overlay_debug()
+		std::vector<std::unique_ptr<gl::texture>> resources;
+
+		ui_overlay_debug(/*rsx::overlays::resource_config& configuration*/)
 		{
 			vs_src =
 			{

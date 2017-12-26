@@ -330,12 +330,14 @@ namespace gl
 		}
 	};
 
-	struct ui_overlay_debug : public overlay_pass
+	struct ui_overlay_renderer : public overlay_pass
 	{
 		u32 num_elements = 0;
 		std::vector<std::unique_ptr<gl::texture>> resources;
+		std::unordered_map<u64, std::unique_ptr<gl::texture>> font_cache;
+		bool is_font_draw = false;
 
-		ui_overlay_debug(/*rsx::overlays::resource_config& configuration*/)
+		ui_overlay_renderer()
 		{
 			vs_src =
 			{
@@ -346,9 +348,8 @@ namespace gl
 				"\n"
 				"void main()\n"
 				"{\n"
-				"	const vec2 offsets[] = {vec2(0., 0.), vec2(1., 0.), vec2(0., 1.), vec2(1., 1.)};\n"
-				"	tc0 = offsets[gl_VertexID % 4];\n"
-				"	vec4 pos = in_pos / ui_scale;\n"
+				"	tc0.xy = in_pos.zw;\n"
+				"	vec4 pos = vec4(in_pos.xy / ui_scale.xy, 0., 1.);\n"
 				"	pos.y = (1. - pos.y);\n"
 				"	gl_Position = (pos + pos) - 1.;\n"
 				"}\n"
@@ -357,20 +358,109 @@ namespace gl
 			fs_src =
 			{
 				"#version 420\n\n"
-				"//layout(binding=31) uniform sampler2D fs0;\n"
+				"layout(binding=31) uniform sampler2D fs0;\n"
 				"layout(location=0) in vec2 tc0;\n"
 				"layout(location=0) out vec4 ocol;\n"
 				"\n"
 				"void main()\n"
 				"{\n"
-				"	//ocol = texture(fs0, tc0).xxxx;\n"
-				"	if (tc0.x < 0.05 || tc0.y < 0.05 ||\n"
-				"		tc0.x > 0.95 || tc0.y > 0.95)\n"
-				"		ocol = vec4(1.);\n"
-				"	else\n"
-				"		ocol = vec4(0.);\n"
+				"	ocol = texture(fs0, tc0);\n"
+				"	//if (tc0.x < 0.05 || tc0.y < 0.05 ||\n"
+				"		//tc0.x > 0.95 || tc0.y > 0.95)\n"
+				"		//ocol = vec4(1.);\n"
+				"	//else\n"
+				"		//ocol = vec4(0.);\n"
 				"}\n"
 			};
+		}
+
+		void create()
+		{
+			overlay_pass::create();
+
+			rsx::overlays::resource_config configuration;
+			configuration.load_files();
+
+			for (const auto &res : configuration.texture_raw_data)
+			{
+				auto tex = std::make_unique<gl::texture>(gl::texture::target::texture2D);
+				tex->create();
+				tex->config()
+					.size({ res->w, res->h })
+					.format(gl::texture::format::rgba)
+					.type(gl::texture::type::uint_8_8_8_8)
+					.wrap(gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border)
+					.swizzle(gl::texture::channel::a, gl::texture::channel::g, gl::texture::channel::b, gl::texture::channel::r)
+					.apply();
+				tex->copy_from(res->data, gl::texture::format::rgba, gl::texture::type::uint_8_8_8_8);
+				resources.push_back(std::move(tex));
+			}
+
+			configuration.free_resources();
+		}
+
+		void destroy()
+		{
+			resources.clear();
+			font_cache.clear();
+			overlay_pass::destroy();
+		}
+
+		gl::texture* find_font(rsx::overlays::font *font)
+		{
+			u64 key = (u64)font;
+			auto found = font_cache.find(key);
+			if (found != font_cache.end())
+				return found->second.get();
+
+			//Create font file
+			auto tex = std::make_unique<gl::texture>(gl::texture::target::texture2D);
+			tex->create();
+			tex->config()
+				.size({ (int)font->width, (int)font->height })
+				.format(gl::texture::format::r)
+				.type(gl::texture::type::ubyte)
+				.internal_format(gl::texture::internal_format::r8)
+				.wrap(gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border)
+				.swizzle(gl::texture::channel::r, gl::texture::channel::r, gl::texture::channel::r, gl::texture::channel::r)
+				.apply();
+			tex->copy_from(font->glyph_data.data(), gl::texture::format::r, gl::texture::type::ubyte);
+
+			auto result = tex.get();
+			font_cache[key] = std::move(tex);
+
+			return result;
+		}
+
+		void emit_geometry() override
+		{
+			if (!is_font_draw)
+			{
+				overlay_pass::emit_geometry();
+			}
+			else
+			{
+				int num_quads = num_drawable_elements / 4;
+				std::vector<GLint> firsts;
+				std::vector<GLsizei> counts;
+
+				firsts.resize(num_quads);
+				counts.resize(num_quads);
+
+				for (int n = 0; n < num_quads; ++n)
+				{
+					firsts[n] = (n * 4);
+					counts[n] = 4;
+				}
+
+				int old_vao;
+				glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &old_vao);
+
+				m_vao.bind();
+				glMultiDrawArrays(GL_TRIANGLE_STRIP, firsts.data(), counts.data(), num_quads);
+
+				glBindVertexArray(old_vao);
+			}
 		}
 
 		void run(u16 w, u16 h, GLuint target, rsx::overlays::user_interface& ui)
@@ -380,6 +470,26 @@ namespace gl
 			{
 				upload_vertex_data((f32*)cmd.second.data(), cmd.second.size() * 4);
 				num_drawable_elements = cmd.second.size();
+				is_font_draw = false;
+
+				glActiveTexture(GL_TEXTURE31);
+				switch (cmd.first.texture_ref)
+				{
+				case rsx::overlays::image_resource_id::game_icon:
+				case rsx::overlays::image_resource_id::backbuffer:
+					//TODO
+				case rsx::overlays::image_resource_id::none:
+					glBindTexture(GL_TEXTURE_2D, GL_NONE);
+					break;
+				case rsx::overlays::image_resource_id::font_file:
+					is_font_draw = true;
+					glBindTexture(GL_TEXTURE_2D, find_font(cmd.first.font_ref)->id());
+					break;
+				default:
+					glBindTexture(GL_TEXTURE_2D, resources[cmd.first.texture_ref - 1]->id());
+					break;
+				}
+
 				overlay_pass::run(w, h, target, false);
 			}
 		}

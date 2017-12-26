@@ -1261,8 +1261,7 @@ namespace gl
 
 		enum class format
 		{
-			red = GL_RED,
-			r = GL_R,
+			r = GL_RED,
 			rg = GL_RG,
 			rgb = GL_RGB,
 			rgba = GL_RGBA,
@@ -1669,9 +1668,9 @@ namespace gl
 			copy_from(nullptr, format, type, pixel_settings);
 		}
 
-		void copy_from(void* dst, texture::format format, texture::type type)
+		void copy_from(void* src, texture::format format, texture::type type)
 		{
-			copy_from(dst, format, type, pixel_unpack_settings());
+			copy_from(src, format, type, pixel_unpack_settings());
 		}
 
 		void copy_from(const buffer& buf, texture::format format, texture::type type)

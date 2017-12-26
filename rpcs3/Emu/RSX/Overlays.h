@@ -14,6 +14,15 @@ namespace rsx
 {
 	namespace overlays
 	{
+		enum image_resource_id : u8
+		{
+			//NOTE: 1 - 252 are user defined
+			none = 0,         //No image
+			font_file = 253,  //Font file
+			game_icon = 254,  //Use game icon
+			backbuffer = 255  //Use current backbuffer contents
+		};
+
 		struct vertex
 		{
 			float values[4];
@@ -65,36 +74,32 @@ namespace rsx
 			}
 		};
 
-		struct compiled_resource
-		{
-			std::vector<std::pair<u64, std::vector<vertex>>> draw_commands;
-
-			void add(compiled_resource& other)
-			{
-				auto old_size = draw_commands.size();
-				draw_commands.resize(old_size + other.draw_commands.size());
-				std::copy(other.draw_commands.begin(), other.draw_commands.end(), draw_commands.begin() + old_size);
-			}
-		};
-
 		struct font
 		{
-			const u32 size = 40;
 			const u32 width = 1024;
 			const u32 height = 1024;
 			const u32 oversample = 2;
-			const u32 char_count = 256; //16x16
+			const u32 char_count = 256; //16x16 grid at max 48pt
 
-			bool initialized = false;
+			u32 size_pt = 12;
+			u32 size_px = 16; //Default font 12pt size
 			std::string font_name;
 			std::vector<stbtt_packedchar> pack_info;
 			std::vector<u8> glyph_data;
+			bool initialized = false;
 
-			font(const char *ttf_name)
+			font(const char *ttf_name, int size)
 			{
 				//Init glyph
 				std::vector<u8> bytes;
 				fs::file f(std::string("C:/Windows/Fonts/") + ttf_name + ".ttf");
+
+				if (!f.size())
+				{
+					LOG_ERROR(RSX, "Failed to initialize font '%s.ttf'", ttf_name);
+					return;
+				}
+
 				f.read(bytes, f.size());
 
 				glyph_data.resize(width * height);
@@ -108,9 +113,15 @@ namespace rsx
 				}
 
 				stbtt_PackSetOversampling(&context, oversample, oversample);
-				if (!stbtt_PackFontRange(&context, bytes.data(), 0, size, 0, 256, pack_info.data()))
+
+				//Convert pt to px
+				size_px = (u32)ceil((double)size * 96. / 72.);
+				size_pt = size;
+
+				if (!stbtt_PackFontRange(&context, bytes.data(), 0, size_px, 0, 256, pack_info.data()))
 				{
 					LOG_ERROR(RSX, "Font packing failed");
+					stbtt_PackEnd(&context);
 					return;
 				}
 
@@ -170,11 +181,12 @@ namespace rsx
 			{
 				for (auto &f : fonts)
 				{
-					if (f->font_name == name)
+					if (f->font_name == name &&
+						f->size_pt == size)
 						return f.get();
 				}
 
-				fonts.push_back(std::make_unique<font>(name));
+				fonts.push_back(std::make_unique<font>(name, size));
 				return fonts.back().get();
 			}
 
@@ -225,6 +237,15 @@ namespace rsx
 				}
 			};
 
+			enum standard_image_resource : u8
+			{
+				arrow_up = 1,
+				arrow_down,
+				scroll_indicator,
+				cross,
+				circle
+			};
+
 			//Define resources
 			std::vector<std::string> texture_resource_files;
 			std::vector<std::unique_ptr<image_info>> texture_raw_data;
@@ -242,7 +263,7 @@ namespace rsx
 			{
 				for (const auto &res : texture_resource_files)
 				{
-					auto info = std::make_unique<image_info>(("Icons/ui/" + res).c_str());
+					auto info = std::make_unique<image_info>((fs::get_config_dir() + "/Icons/ui/" + res).c_str());
 					texture_raw_data.push_back(std::move(info));
 				}
 			}
@@ -250,6 +271,38 @@ namespace rsx
 			void free_resources()
 			{
 				texture_raw_data.clear();
+			}
+		};
+
+		struct compiled_resource
+		{
+			struct command_config
+			{
+				u8 texture_ref = image_resource_id::none;
+				font *font_ref = nullptr;
+
+				command_config() {}
+
+				command_config(u8 ref)
+				{
+					texture_ref = ref;
+					font_ref = nullptr;
+				}
+
+				command_config(font *ref)
+				{
+					texture_ref = image_resource_id::font_file;
+					font_ref = ref;
+				}
+			};
+
+			std::vector<std::pair<command_config, std::vector<vertex>>> draw_commands;
+
+			void add(compiled_resource& other)
+			{
+				auto old_size = draw_commands.size();
+				draw_commands.resize(old_size + other.draw_commands.size());
+				std::copy(other.draw_commands.begin(), other.draw_commands.end(), draw_commands.begin() + old_size);
 			}
 		};
 
@@ -261,7 +314,7 @@ namespace rsx
 			u16 h = 0;
 
 			std::string text;
-			font* font;
+			font* font = nullptr;
 
 			compiled_resource compiled_resources;
 			bool is_compiled = false;
@@ -313,20 +366,21 @@ namespace rsx
 			virtual std::vector<vertex> render_text(const char *string, f32 x, f32 y)
 			{
 				auto renderer = font;
-				if (!renderer) renderer = fontmgr::get("Arial", 11);
+				if (!renderer) renderer = fontmgr::get("Arial", 12);
 
 				std::vector<vertex> result = renderer->render_text(string);
 				for (auto &v : result)
 				{
-					//Apply transform
+					//Apply transform.
+					//(0, 0) has text sitting 50% off the top left corner (text is outside the rect) hence the offset by text height / 2
 					v.values[0] += x;
-					v.values[1] += y;
+					v.values[1] += y + (f32)renderer->size_px * 0.5f;
 				}
 
 				return result;
 			}
 
-			virtual compiled_resource get_compiled()
+			virtual compiled_resource& get_compiled()
 			{
 				if (!is_compiled)
 				{
@@ -335,14 +389,15 @@ namespace rsx
 
 					auto& verts = compiled_resources.draw_commands.front().second;
 					verts.resize(4);
-					verts[0].vec2(x, y);
-					verts[1].vec2(x + w, y);
-					verts[2].vec2(x, y + h);
-					verts[3].vec2(x + w, y + h);
+					verts[0].vec4(x, y, 0.f, 0.f);
+					verts[1].vec4(x + w, y, 1.f, 0.f);
+					verts[2].vec4(x, y + h, 0.f, 1.f);
+					verts[3].vec4(x + w, y + h, 1.f, 1.f);
 
 					if (!text.empty())
 					{
 						compiled_resources.draw_commands.push_back({});
+						compiled_resources.draw_commands.back().first = font? font : fontmgr::get("Arial", 12);
 						compiled_resources.draw_commands.back().second = render_text(text.c_str(), x + 15, y + 5);
 					}
 
@@ -366,6 +421,8 @@ namespace rsx
 		struct layout_container : public overlay_element
 		{
 			std::vector<std::unique_ptr<overlay_element>> m_items;
+			u16 advance_pos = 0;
+			bool auto_resize = true;
 
 			virtual overlay_element* add_element(std::unique_ptr<overlay_element>&, int = -1) = 0;
 
@@ -384,7 +441,7 @@ namespace rsx
 				translate(dx, dy);
 			}
 
-			compiled_resource get_compiled() override
+			compiled_resource& get_compiled() override
 			{
 				if (!is_compiled)
 				{
@@ -411,12 +468,19 @@ namespace rsx
 
 		struct vertical_layout : public layout_container
 		{
-			u16 m_vertical_pos = 0;
-
 			overlay_element* add_element(std::unique_ptr<overlay_element>& item, int offset = -1)
 			{
-				item->y = m_vertical_pos;
-				m_vertical_pos += item->h;
+				if (auto_resize)
+				{
+					item->set_pos(item->x + x, h + y);
+					h += item->h;
+					w = std::max(w, item->w);
+				}
+				else
+				{
+					item->set_pos(item->x + x, advance_pos + y);
+					advance_pos += item->h;
+				}
 
 				if (offset < 0)
 				{
@@ -434,12 +498,19 @@ namespace rsx
 
 		struct horizontal_layout : public layout_container
 		{
-			u16 m_horizontal_pos = 0;
-
 			overlay_element* add_element(std::unique_ptr<overlay_element>& item, int offset = -1)
 			{
-				item->x = m_horizontal_pos;
-				m_horizontal_pos += item->w;
+				if (auto_resize)
+				{
+					item->set_pos(w + x, item->y + y);
+					w += item->w;
+					h = std::max(h, item->h);
+				}
+				else
+				{
+					item->set_pos(advance_pos + x, item->y + y);
+					advance_pos += item->w;
+				}
 
 				if (offset < 0)
 				{
@@ -459,21 +530,75 @@ namespace rsx
 		struct spacer : public overlay_element
 		{
 			using overlay_element::overlay_element;
+			compiled_resource& get_compiled() override
+			{
+				//No draw
+				return compiled_resources;
+			}
 		};
 
 		struct image_view : public overlay_element
 		{
 			using overlay_element::overlay_element;
+			u8 image_resource_ref = image_resource_id::none;
+
+			compiled_resource& get_compiled() override
+			{
+				if (!is_compiled)
+				{
+					auto &result = overlay_element::get_compiled();
+					result.draw_commands.front().first = image_resource_ref;
+				}
+
+				return compiled_resources;
+			}
 		};
 
-		struct button : public overlay_element
+		struct image_button : public image_view
 		{
-			using overlay_element::overlay_element;
+			using image_view::image_view;
+			u16 text_offset = 0;
+
+			void set_size(u16 w, u16 h) override
+			{
+				image_view::set_size(h, h);
+				text_offset = h;
+			}
+
+			compiled_resource& get_compiled() override
+			{
+				if (!is_compiled)
+				{
+					auto& compiled = image_view::get_compiled();
+					for (auto &cmd : compiled.draw_commands)
+					{
+						if (cmd.first.texture_ref == image_resource_id::font_file)
+						{
+							//Text, translate geometry to the right
+							const u16 text_height = font ? font->size_px : 16;
+							const f32 offset_y = (h > text_height) ? (f32)(h - text_height) : ((f32)h - text_height);
+
+							for (auto &v : cmd.second)
+							{
+								v.values[0] += text_offset;
+								v.values[1] += offset_y;
+							}
+						}
+					}
+				}
+
+				return compiled_resources;
+			}
 		};
 
 		struct label : public overlay_element
 		{
-			using overlay_element::overlay_element;
+			label() {}
+
+			label(const char *text)
+			{
+				this->text = text;
+			}
 		};
 
 		struct list_view : public vertical_layout
@@ -481,14 +606,14 @@ namespace rsx
 		private:
 			std::unique_ptr<image_view> m_scroll_indicator_top;
 			std::unique_ptr<image_view> m_scroll_indicator_bottom;
-			std::unique_ptr<button> m_cancel_btn;
-			std::unique_ptr<button> m_accept_btn;
+			std::unique_ptr<image_button> m_cancel_btn;
+			std::unique_ptr<image_button> m_accept_btn;
 
 			u16 m_scroll_offset = 0;
 			u16 m_entry_height = 16;
 			u16 m_elements_height = 0;
 			s16 m_selected_entry = -1;
-			u16 m_elements_count;
+			u16 m_elements_count = 0;
 		
 		public:
 			list_view(u16 width, u16 height, u16 entry_height)
@@ -499,18 +624,32 @@ namespace rsx
 
 				m_scroll_indicator_top = std::make_unique<image_view>(width, 5);
 				m_scroll_indicator_bottom = std::make_unique<image_view>(width, 5);
-				m_accept_btn = std::make_unique<button>(120, 20);
-				m_cancel_btn = std::make_unique<button>(120, 20);
+				m_accept_btn = std::make_unique<image_button>(120, 20);
+				m_cancel_btn = std::make_unique<image_button>(120, 20);
 
 				m_scroll_indicator_top->set_size(width, 20);
 				m_scroll_indicator_bottom->set_size(width, 20);
 				m_accept_btn->set_size(120, 30);
 				m_cancel_btn->set_size(120, 30);
 
+				m_scroll_indicator_top->image_resource_ref = resource_config::standard_image_resource::arrow_up;
+				m_scroll_indicator_bottom->image_resource_ref = resource_config::standard_image_resource::arrow_down;
+				m_accept_btn->image_resource_ref = resource_config::standard_image_resource::circle;
+				m_cancel_btn->image_resource_ref = resource_config::standard_image_resource::cross;
+
 				m_scroll_indicator_top->translate(0, -20);
 				m_scroll_indicator_bottom->set_pos(0, height);
 				m_accept_btn->set_pos(0, height + 30);
 				m_cancel_btn->set_pos(150, height + 30);
+
+				m_accept_btn->text = "Accept";
+				m_cancel_btn->text = "Cancel";
+
+				auto fnt = fontmgr::get("Arial", 16);
+				m_accept_btn->font = fnt;
+				m_cancel_btn->font = fnt;
+
+				auto_resize = false;
 			}
 
 			void scroll_down()
@@ -525,14 +664,9 @@ namespace rsx
 					m_scroll_offset -= m_entry_height;
 			}
 
-			void add_entry(std::string& text)
+			void add_entry(std::unique_ptr<overlay_element>& entry)
 			{
-				std::unique_ptr<overlay_element> entry = std::make_unique<label>(w, m_entry_height);
-				entry->text = text;
-				entry->font = fontmgr::get("Arial", 12);
-				entry->render();
-
-				add_element(entry, m_elements_count + 2);
+				add_element(entry);
 				m_elements_count++;
 				m_elements_height += m_entry_height;
 			}
@@ -547,7 +681,7 @@ namespace rsx
 				if (m_selected_entry < 0)
 					return{};
 
-				return m_items[m_selected_entry + 2]->text;
+				return m_items[m_selected_entry]->text;
 			}
 
 			void translate(s16 _x, s16 _y) override
@@ -559,7 +693,7 @@ namespace rsx
 				m_cancel_btn->translate(_x, _y);
 			}
 
-			compiled_resource get_compiled()
+			compiled_resource& get_compiled()
 			{
 				if (!is_compiled)
 				{
@@ -600,6 +734,37 @@ namespace rsx
 
 		struct save_dialog : public user_interface
 		{
+			struct save_dialog_entry : horizontal_layout
+			{
+				save_dialog_entry(const char* text1, const char* text2, u8 image_resource_id)
+				{
+					std::unique_ptr<overlay_element> image = std::make_unique<image_view>();
+					image->set_size(100, 100);
+					static_cast<image_view*>(image.get())->image_resource_ref = image_resource_id;
+
+					std::unique_ptr<overlay_element> text_stack = std::make_unique<vertical_layout>();
+					std::unique_ptr<overlay_element> padding = std::make_unique<spacer>();
+					std::unique_ptr<overlay_element> header_text = std::make_unique<label>(text1);
+					std::unique_ptr<overlay_element> subtext = std::make_unique<label>(text2);
+
+					padding->set_size(1, 10);
+					header_text->set_size(200, 40);
+					header_text->text = text1;
+					header_text->font = fontmgr::get("Arial", 16);
+					subtext->set_size(200, 40);
+					subtext->text = text2;
+					subtext->font = fontmgr::get("Arial", 14);
+
+					static_cast<vertical_layout*>(text_stack.get())->add_element(padding);
+					static_cast<vertical_layout*>(text_stack.get())->add_element(header_text);
+					static_cast<vertical_layout*>(text_stack.get())->add_element(subtext);
+
+					//Pack
+					add_element(image);
+					add_element(text_stack);
+				}
+			};
+
 			std::unique_ptr<list_view> m_list;
 			std::unique_ptr<label> m_description;
 			std::unique_ptr<label> m_time_thingy;
@@ -617,10 +782,15 @@ namespace rsx
 				m_description->text = "Save Dialog";
 				m_description->render();
 
-				m_time_thingy->font = fontmgr::get("Arial", 11);
+				m_time_thingy->font = fontmgr::get("Arial", 12);
 				m_time_thingy->set_pos(1000, 20);
 				m_time_thingy->text = "Sat, Jan 01, 00: 00: 00 GMT";
 				m_time_thingy->render();
+
+				std::unique_ptr<overlay_element> entry1 = std::make_unique<save_dialog_entry>("Entry 1", "Sub-entry 1", resource_config::standard_image_resource::cross);
+				std::unique_ptr<overlay_element> entry2 = std::make_unique<save_dialog_entry>("Entry 2", "Sub-entry 2", resource_config::standard_image_resource::circle);
+				m_list->add_entry(entry1);
+				m_list->add_entry(entry2);
 			}
 
 			void add_entries(std::vector<std::string>& entries)

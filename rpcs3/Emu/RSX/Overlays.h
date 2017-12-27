@@ -123,6 +123,13 @@ namespace rsx
 								button_state[button_id] = button.m_pressed;
 							}
 
+							if (button.m_flush)
+							{
+								button.m_pressed = false;
+								button.m_flush = false;
+								button.m_value = 0;
+							}
+
 							if (exit)
 								return 0;
 						}
@@ -242,7 +249,7 @@ namespace rsx
 					m_list->select_next();
 					break;
 				default:
-					LOG_ERROR(RSX, "Button %d pressed", (u8)button_press);
+					LOG_TRACE(RSX, "[ui] Button %d pressed", (u8)button_press);
 				}
 			}
 

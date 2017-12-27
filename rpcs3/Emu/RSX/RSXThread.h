@@ -12,7 +12,7 @@
 #include "RSXFragmentProgram.h"
 #include "rsx_methods.h"
 #include "rsx_utils.h"
-#include "Overlays.h"
+#include "overlays.h"
 #include <Utilities/GSL.h>
 
 #include "Utilities/Thread.h"
@@ -217,6 +217,7 @@ namespace rsx
 		bool skip_frame = false;
 
 		bool supports_multidraw = false;
+		bool supports_native_ui = false;
 
 		//occlusion query
 		bool zcull_surface_active = false;
@@ -231,7 +232,7 @@ namespace rsx
 		rsx::gcm_framebuffer_info m_depth_surface_info;
 		bool framebuffer_status_valid = false;
 
-		std::shared_ptr<rsx::overlays::user_interface> m_custom_ui;
+		std::unique_ptr<rsx::overlays::user_interface> m_custom_ui;
 
 	public:
 		RsxDmaControl* ctrl = nullptr;
@@ -239,6 +240,9 @@ namespace rsx
 		atomic_t<u32> restore_point{ 0 };
 		atomic_t<bool> external_interrupt_lock{ false };
 		atomic_t<bool> external_interrupt_ack{ false };
+
+		//native UI interrupts
+		atomic_t<bool> native_ui_flip_request{ false };
 
 		GcmTileInfo tiles[limits::tiles_count];
 		GcmZcullInfo zculls[limits::zculls_count];
@@ -489,5 +493,10 @@ namespace rsx
 
 		void pause();
 		void unpause();
+
+		//HLE vsh stuff
+		virtual rsx::overlays::save_dialog* shell_open_save_dialog();
+		virtual void shell_close_dialog();
+		virtual void shell_do_cleanup(){}
 	};
 }

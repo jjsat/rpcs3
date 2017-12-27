@@ -2176,4 +2176,27 @@ namespace rsx
 	{
 		external_interrupt_lock.store(false);
 	}
+
+	rsx::overlays::save_dialog* thread::shell_open_save_dialog()
+	{
+		if (supports_native_ui)
+		{
+			auto ptr = new rsx::overlays::save_dialog();
+			m_custom_ui.reset(ptr);
+			return ptr;
+		}
+		else
+		{
+			return nullptr;
+		}
+	}
+
+	void thread::shell_close_dialog()
+	{
+		if (supports_native_ui)
+		{
+			m_custom_ui.reset();
+			shell_do_cleanup();
+		}
+	}
 }

@@ -32,7 +32,7 @@ GLGSRender::GLGSRender() : GSRender()
 		m_vertex_cache.reset(new gl::weak_vertex_cache());
 
 	supports_multidraw = !g_cfg.video.strict_rendering_mode;
-	m_custom_ui.reset(new rsx::overlays::save_dialog());
+	supports_native_ui = true;
 }
 
 extern CellGcmContextData current_context;
@@ -1261,7 +1261,7 @@ void GLGSRender::flip(int buffer)
 	{
 		gl::screen.bind();
 		glViewport(0, 0, m_frame->client_width(), m_frame->client_height());
-		m_ui_renderer.run(buffer_width, buffer_height, 0, *m_custom_ui.get());
+		m_ui_renderer.run(m_frame->client_width(), m_frame->client_height(), 0, *m_custom_ui.get());
 	}
 
 	if (g_cfg.video.overlay)
@@ -1373,6 +1373,15 @@ void GLGSRender::do_local_task()
 		//Notify thread waiting on this
 		lock.unlock();
 		q.cv.notify_one();
+	}
+
+	if (m_custom_ui)
+	{
+		if (native_ui_flip_request.load())
+		{
+			native_ui_flip_request.store(false);
+			flip((s32)current_display_buffer);
+		}
 	}
 }
 

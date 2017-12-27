@@ -2,7 +2,9 @@
 
 #include "stdafx.h"
 #include "GLHelpers.h"
-#include "../Overlays.h"
+#include "../overlay_controls.h"
+
+extern u64 get_system_time();
 
 namespace gl
 {
@@ -100,7 +102,7 @@ namespace gl
 			glBindVertexArray(old_vao);
 		}
 
-		virtual void run(u16 w, u16 h, GLuint target_texture, bool depth_target)
+		virtual void run(u16 w, u16 h, GLuint target_texture, bool depth_target, bool use_blending = false)
 		{
 			if (!compiled)
 			{
@@ -114,6 +116,13 @@ namespace gl
 			GLint viewport[4];
 			GLboolean color_writes[4];
 			GLboolean depth_write;
+
+			GLint blend_src_rgb;
+			GLint blend_src_a;
+			GLint blend_dst_rgb;
+			GLint blend_dst_a;
+			GLint blend_eq_a;
+			GLint blend_eq_rgb;
 
 			if (target_texture)
 			{
@@ -148,6 +157,16 @@ namespace gl
 				GLboolean blend_enabled = glIsEnabled(GL_BLEND);
 				GLboolean stencil_test_enabled = glIsEnabled(GL_STENCIL_TEST);
 
+				if (use_blending)
+				{
+					glGetIntegerv(GL_BLEND_SRC_RGB, &blend_src_rgb);
+					glGetIntegerv(GL_BLEND_SRC_ALPHA, &blend_src_a);
+					glGetIntegerv(GL_BLEND_DST_RGB, &blend_dst_rgb);
+					glGetIntegerv(GL_BLEND_DST_ALPHA, &blend_dst_a);
+					glGetIntegerv(GL_BLEND_EQUATION_RGB, &blend_eq_rgb);
+					glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &blend_eq_a);
+				}
+
 				// Set initial state
 				glViewport(0, 0, w, h);
 				glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -159,8 +178,19 @@ namespace gl
 
 				if (scissor_enabled) glDisable(GL_SCISSOR_TEST);
 				if (cull_face_enabled) glDisable(GL_CULL_FACE);
-				if (blend_enabled) glDisable(GL_BLEND);
 				if (stencil_test_enabled) glDisable(GL_STENCIL_TEST);
+
+				if (use_blending)
+				{
+					if (!blend_enabled)
+						glEnable(GL_BLEND);
+
+					glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				}
+				else if (blend_enabled)
+				{
+					glDisable(GL_BLEND);
+				}
 
 				// Render
 				program_handle.use();
@@ -189,8 +219,20 @@ namespace gl
 				if (!depth_test_enabled) glDisable(GL_DEPTH_TEST);
 				if (scissor_enabled) glEnable(GL_SCISSOR_TEST);
 				if (cull_face_enabled) glEnable(GL_CULL_FACE);
-				if (blend_enabled) glEnable(GL_BLEND);
 				if (stencil_test_enabled) glEnable(GL_STENCIL_TEST);
+
+				if (use_blending)
+				{
+					if (!blend_enabled)
+						glDisable(GL_BLEND);
+
+					glBlendFuncSeparate(blend_src_rgb, blend_dst_rgb, blend_src_a, blend_dst_a);
+					glBlendEquationSeparate(blend_eq_rgb, blend_eq_a);
+				}
+				else if (blend_enabled)
+				{
+					 glEnable(GL_BLEND);
+				}
 			}
 			else
 			{
@@ -349,7 +391,7 @@ namespace gl
 				"void main()\n"
 				"{\n"
 				"	tc0.xy = in_pos.zw;\n"
-				"	vec4 pos = vec4(in_pos.xy / ui_scale.xy, 0., 1.);\n"
+				"	vec4 pos = vec4((in_pos.xy * ui_scale.zw) / ui_scale.xy, 0., 1.);\n"
 				"	pos.y = (1. - pos.y);\n"
 				"	gl_Position = (pos + pos) - 1.;\n"
 				"}\n"
@@ -361,15 +403,21 @@ namespace gl
 				"layout(binding=31) uniform sampler2D fs0;\n"
 				"layout(location=0) in vec2 tc0;\n"
 				"layout(location=0) out vec4 ocol;\n"
+				"uniform vec4 color;\n"
+				"uniform float time;\n"
+				"uniform int read_texture;\n"
+				"uniform int pulse_glow;\n"
 				"\n"
 				"void main()\n"
 				"{\n"
-				"	ocol = texture(fs0, tc0);\n"
-				"	//if (tc0.x < 0.05 || tc0.y < 0.05 ||\n"
-				"		//tc0.x > 0.95 || tc0.y > 0.95)\n"
-				"		//ocol = vec4(1.);\n"
-				"	//else\n"
-				"		//ocol = vec4(0.);\n"
+				"	vec4 diff_color = color;\n"
+				"	if (pulse_glow != 0)\n"
+				"		diff_color.a *= (sin(time) + 1.f) * 0.5f;\n"
+				"\n"
+				"	if (read_texture != 0)\n"
+				"		ocol = texture(fs0, tc0) * diff_color;\n"
+				"	else\n"
+				"		ocol = diff_color;\n"
 				"}\n"
 			};
 		}
@@ -390,7 +438,7 @@ namespace gl
 					.format(gl::texture::format::rgba)
 					.type(gl::texture::type::uint_8_8_8_8)
 					.wrap(gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border)
-					.swizzle(gl::texture::channel::a, gl::texture::channel::g, gl::texture::channel::b, gl::texture::channel::r)
+					.swizzle(gl::texture::channel::a, gl::texture::channel::b, gl::texture::channel::g, gl::texture::channel::r)
 					.apply();
 				tex->copy_from(res->data, gl::texture::format::rgba, gl::texture::type::uint_8_8_8_8);
 				resources.push_back(std::move(tex));
@@ -465,12 +513,14 @@ namespace gl
 
 		void run(u16 w, u16 h, GLuint target, rsx::overlays::user_interface& ui)
 		{
-			glProgramUniform4f(program_handle.id(), program_handle.uniforms["ui_scale"].location(), (f32)ui.virtual_width, (f32)ui.virtual_height, 1.f, 1.f);
+			program_handle.uniforms["ui_scale"] = color4f((f32)ui.virtual_width, (f32)ui.virtual_height, 1.f, 1.f);
+			program_handle.uniforms["time"] = (f32)(get_system_time() / 1000) * 0.005f;
 			for (auto &cmd : ui.get_compiled().draw_commands)
 			{
 				upload_vertex_data((f32*)cmd.second.data(), cmd.second.size() * 4);
 				num_drawable_elements = cmd.second.size();
 				is_font_draw = false;
+				GLint texture_exists = GL_TRUE;
 
 				glActiveTexture(GL_TEXTURE31);
 				switch (cmd.first.texture_ref)
@@ -479,6 +529,7 @@ namespace gl
 				case rsx::overlays::image_resource_id::backbuffer:
 					//TODO
 				case rsx::overlays::image_resource_id::none:
+					texture_exists = GL_FALSE;
 					glBindTexture(GL_TEXTURE_2D, GL_NONE);
 					break;
 				case rsx::overlays::image_resource_id::font_file:
@@ -490,7 +541,10 @@ namespace gl
 					break;
 				}
 
-				overlay_pass::run(w, h, target, false);
+				program_handle.uniforms["color"] = cmd.first.color;
+				program_handle.uniforms["read_texture"] = texture_exists;
+				program_handle.uniforms["pulse_glow"] = (s32)cmd.first.pulse_glow;
+				overlay_pass::run(w, h, target, false, true);
 			}
 		}
 	};

@@ -2,7 +2,7 @@
 
 #include "stdafx.h"
 #include "GLHelpers.h"
-#include "../overlay_controls.h"
+#include "../overlays.h"
 
 extern u64 get_system_time();
 

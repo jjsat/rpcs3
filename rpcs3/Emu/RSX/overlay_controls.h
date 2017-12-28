@@ -362,10 +362,10 @@ namespace rsx
 			compiled_resource compiled_resources;
 			bool is_compiled = false;
 
-			f32 padding_left = 0;
-			f32 padding_right = 0;
-			f32 padding_top = 0;
-			f32 padding_bottom = 0;
+			f32 padding_left = 0.f;
+			f32 padding_right = 0.f;
+			f32 padding_top = 0.f;
+			f32 padding_bottom = 0.f;
 
 			overlay_element() {}
 			overlay_element(u16 _w, u16 _h) : w(_w), h(_h) {}
@@ -420,11 +420,32 @@ namespace rsx
 				padding_right = right;
 				padding_top = top;
 				padding_bottom = bottom;
+
+				is_compiled = false;
 			}
 
 			virtual void set_padding(f32 padding)
 			{
 				padding_left = padding_right = padding_top = padding_bottom = padding;
+				is_compiled = false;
+			}
+
+			virtual void set_text(std::string& text)
+			{
+				this->text = text;
+				is_compiled = false;
+			}
+
+			virtual void set_text(const char* text)
+			{
+				this->text = text;
+				is_compiled = false;
+			}
+
+			virtual void set_font(const char* font_name, u16 font_size)
+			{
+				font = fontmgr::get(font_name, font_size);
+				is_compiled = false;
 			}
 
 			virtual std::vector<vertex> render_text(const char *string, f32 x, f32 y)

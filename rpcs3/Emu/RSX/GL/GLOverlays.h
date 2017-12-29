@@ -321,57 +321,6 @@ namespace gl
 		}
 	};
 
-	struct ui_overlay_text : public overlay_pass
-	{
-		ui_overlay_text()
-		{
-			vs_src =
-			{
-				"#version 420\n\n"
-				"layout(location=0) in vec4 in_pos;\n"
-				"layout(location=0) out vec2 tc0;\n"
-				"uniform vec4 ui_scale_parameters;\n"
-				"\n"
-				"void main()\n"
-				"{\n"
-				"	const vec2 offsets[] = {vec2(0., 0.), vec2(1., 0.), vec2(1., 1.), vec2(0., 1.)};\n"
-				"	vec2 pos = offsets[gl_VertexID % 4] * ui_scale_parameters.xy;\n"
-				"	tc0 = offsets[gl_VertexID % 4] * ui_scale_parameters.zw;\n"
-				"	tc0.y += (in_pos.z / 16.) / 16.;\n"
-				"	tc0.x += (in_pos.z % 16.) / 16.;\n"
-				"	gl_Position = vec4(pos, 0., 1.);\n"
-				"}\n"
-			};
-
-			fs_src =
-			{
-				"#version 420\n\n"
-				"layout(binding=31) uniform sampler2D fs0;\n"
-				"layout(location=0) in vec2 tc0;\n"
-				"layout(location=0) out vec4 ocol;\n"
-				"\n"
-				"void main()\n"
-				"{\n"
-				"	ocol = texture(fs0, tc0).xxxx;\n"
-				"}\n"
-			};
-		}
-
-		void load_config()
-		{
-
-		}
-
-		void run(u16 w, u16 h, GLuint target, GLuint source, rsx::overlays::user_interface& ui)
-		{
-			glActiveTexture(GL_TEXTURE31);
-			glBindTexture(GL_TEXTURE_2D, source);
-
-			//Set up vaos, etc
-			overlay_pass::run(w, h, target, false);
-		}
-	};
-
 	struct ui_overlay_renderer : public overlay_pass
 	{
 		u32 num_elements = 0;

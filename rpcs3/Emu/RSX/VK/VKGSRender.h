@@ -136,6 +136,7 @@ private:
 
 	std::unique_ptr<vk::text_writer> m_text_writer;
 	std::unique_ptr<vk::depth_convert_pass> m_depth_converter;
+	std::unique_ptr<vk::ui_overlay_renderer> m_ui_renderer;
 
 	std::mutex m_sampler_mutex;
 	u64 surface_store_tag = 0;

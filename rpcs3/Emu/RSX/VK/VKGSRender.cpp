@@ -676,9 +676,13 @@ VKGSRender::VKGSRender() : GSRender()
 	m_current_frame = &frame_context_storage[0];
 
 	m_texture_cache.initialize((*m_device), m_memory_type_mapping, m_optimal_tiling_supported_formats, m_swap_chain->get_present_queue(),
-			m_texture_upload_buffer_ring_info, m_texture_upload_buffer_ring_info.heap.get());
+			m_texture_upload_buffer_ring_info);
+
+	m_ui_renderer.reset(new vk::ui_overlay_renderer());
+	m_ui_renderer->create(*m_current_command_buffer, m_memory_type_mapping, m_texture_upload_buffer_ring_info);
 
 	supports_multidraw = !g_cfg.video.strict_rendering_mode;
+	supports_native_ui = true;
 }
 
 VKGSRender::~VKGSRender()
@@ -756,6 +760,10 @@ VKGSRender::~VKGSRender()
 
 	//Overlay text handler
 	m_text_writer.reset();
+
+	//Overlay UI renderer
+	m_ui_renderer->destroy();
+	m_ui_renderer.reset();
 
 	//RGBA->depth cast helper
 	m_depth_converter->destroy();
@@ -1965,6 +1973,7 @@ void VKGSRender::process_swap_request(frame_context_t *ctx, bool free_resources)
 		}
 
 		m_depth_converter->free_resources();
+		m_ui_renderer->free_resources();
 
 		ctx->buffer_views_to_clean.clear();
 		ctx->samplers_to_clean.clear();
@@ -2096,6 +2105,16 @@ void VKGSRender::do_local_task()
 	}
 
 #endif
+
+	if (m_custom_ui)
+	{
+		if (native_ui_flip_request.load())
+		{
+			native_ui_flip_request.store(false);
+			flush_command_queue(true);
+			flip((s32)current_display_buffer);
+		}
+	}
 }
 
 bool VKGSRender::do_method(u32 cmd, u32 arg)
@@ -2841,9 +2860,6 @@ void VKGSRender::flip(int buffer)
 
 	u32 buffer_width = display_buffers[buffer].width;
 	u32 buffer_height = display_buffers[buffer].height;
-	u32 buffer_pitch = display_buffers[buffer].pitch;
-
-	areai screen_area = coordi({}, { (int)buffer_width, (int)buffer_height });
 
 	coordi aspect_ratio;
 
@@ -2919,10 +2935,19 @@ void VKGSRender::flip(int buffer)
 	//Blit contents to screen..
 	vk::image* image_to_flip = nullptr;
 
-	if (std::get<1>(m_rtts.m_bound_render_targets[0]) != nullptr)
-		image_to_flip = std::get<1>(m_rtts.m_bound_render_targets[0]);
-	else if (std::get<1>(m_rtts.m_bound_render_targets[1]) != nullptr)
-		image_to_flip = std::get<1>(m_rtts.m_bound_render_targets[1]);
+	rsx::tiled_region buffer_region = get_tiled_address(display_buffers[buffer].offset, CELL_GCM_LOCATION_LOCAL);
+	u32 absolute_address = buffer_region.address + buffer_region.base;
+
+	if (auto render_target_texture = m_rtts.get_texture_from_render_target_if_applicable(absolute_address))
+	{
+		image_to_flip = render_target_texture;
+	}
+	else if (auto surface = m_texture_cache.find_texture_from_dimensions(absolute_address))
+	{
+		//Hack - this should be the first location to check for output
+		//The render might have been done offscreen or in software and a blit used to display
+		image_to_flip = surface->get_raw_texture();
+	}
 
 	VkImage target_image = m_swap_chain->get_swap_chain_image(m_current_frame->present_image);
 	if (image_to_flip)
@@ -2933,6 +2958,7 @@ void VKGSRender::flip(int buffer)
 	else
 	{
 		//No draw call was issued!
+		//TODO: Upload raw bytes from cpu for rendering
 		VkImageSubresourceRange range = vk::get_image_subresource_range(0, 0, 1, 1, VK_IMAGE_ASPECT_COLOR_BIT);
 		VkClearColorValue clear_black = { 0 };
 		vk::change_image_layout(*m_current_command_buffer, m_swap_chain->get_swap_chain_image(m_current_frame->present_image), VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_GENERAL, range);
@@ -2942,7 +2968,7 @@ void VKGSRender::flip(int buffer)
 
 	std::unique_ptr<vk::framebuffer_holder> direct_fbo;
 	std::vector<std::unique_ptr<vk::image_view>> swap_image_view;
-	if (g_cfg.video.overlay)
+	if (g_cfg.video.overlay || m_custom_ui)
 	{
 		//Change the image layout whilst setting up a dependency on waiting for the blit op to finish before we start writing
 		auto subres = vk::get_image_subresource_range(0, 0, 1, 1, VK_IMAGE_ASPECT_COLOR_BIT);
@@ -2980,19 +3006,27 @@ void VKGSRender::flip(int buffer)
 			direct_fbo.reset(new vk::framebuffer_holder(*m_device, single_target_pass, m_client_width, m_client_height, std::move(swap_image_view)));
 		}
 
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 0, direct_fbo->width(), direct_fbo->height(), "draw calls: " + std::to_string(m_draw_calls));
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 18, direct_fbo->width(), direct_fbo->height(), "draw call setup: " + std::to_string(m_setup_time) + "us");
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 36, direct_fbo->width(), direct_fbo->height(), "vertex upload time: " + std::to_string(m_vertex_upload_time) + "us");
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 54, direct_fbo->width(), direct_fbo->height(), "texture upload time: " + std::to_string(m_textures_upload_time) + "us");
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 72, direct_fbo->width(), direct_fbo->height(), "draw call execution: " + std::to_string(m_draw_time) + "us");
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 90, direct_fbo->width(), direct_fbo->height(), "submit and flip: " + std::to_string(m_flip_time) + "us");
+		if (m_custom_ui)
+		{
+			m_ui_renderer->run(*m_current_command_buffer, direct_fbo->width(), direct_fbo->height(), direct_fbo.get(), single_target_pass, m_memory_type_mapping, m_texture_upload_buffer_ring_info, *m_custom_ui);
+		}
 
-		auto num_dirty_textures = m_texture_cache.get_unreleased_textures_count();
-		auto texture_memory_size = m_texture_cache.get_texture_memory_in_use() / (1024 * 1024);
-		auto tmp_texture_memory_size = m_texture_cache.get_temporary_memory_in_use() / (1024 * 1024);
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 126, direct_fbo->width(), direct_fbo->height(), "Unreleased textures: " + std::to_string(num_dirty_textures));
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 144, direct_fbo->width(), direct_fbo->height(), "Texture cache memory: " + std::to_string(texture_memory_size) + "M");
-		m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 162, direct_fbo->width(), direct_fbo->height(), "Temporary texture memory: " + std::to_string(tmp_texture_memory_size) + "M");
+		if (g_cfg.video.overlay)
+		{
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 0, direct_fbo->width(), direct_fbo->height(), "draw calls: " + std::to_string(m_draw_calls));
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 18, direct_fbo->width(), direct_fbo->height(), "draw call setup: " + std::to_string(m_setup_time) + "us");
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 36, direct_fbo->width(), direct_fbo->height(), "vertex upload time: " + std::to_string(m_vertex_upload_time) + "us");
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 54, direct_fbo->width(), direct_fbo->height(), "texture upload time: " + std::to_string(m_textures_upload_time) + "us");
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 72, direct_fbo->width(), direct_fbo->height(), "draw call execution: " + std::to_string(m_draw_time) + "us");
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 90, direct_fbo->width(), direct_fbo->height(), "submit and flip: " + std::to_string(m_flip_time) + "us");
+
+			auto num_dirty_textures = m_texture_cache.get_unreleased_textures_count();
+			auto texture_memory_size = m_texture_cache.get_texture_memory_in_use() / (1024 * 1024);
+			auto tmp_texture_memory_size = m_texture_cache.get_temporary_memory_in_use() / (1024 * 1024);
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 126, direct_fbo->width(), direct_fbo->height(), "Unreleased textures: " + std::to_string(num_dirty_textures));
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 144, direct_fbo->width(), direct_fbo->height(), "Texture cache memory: " + std::to_string(texture_memory_size) + "M");
+			m_text_writer->print_text(*m_current_command_buffer, *direct_fbo, 0, 162, direct_fbo->width(), direct_fbo->height(), "Temporary texture memory: " + std::to_string(tmp_texture_memory_size) + "M");
+		}
 
 		vk::change_image_layout(*m_current_command_buffer, target_image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subres);
 		m_framebuffers_to_clean.push_back(std::move(direct_fbo));

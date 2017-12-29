@@ -165,7 +165,7 @@ namespace rsx
 				std::vector<vertex> result;
 
 				int i = 0;
-				f32 x_advance, y_advance;
+				f32 x_advance = 0.f, y_advance = 0.f;
 
 				while (true)
 				{

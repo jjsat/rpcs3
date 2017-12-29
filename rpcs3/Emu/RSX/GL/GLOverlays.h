@@ -388,6 +388,7 @@ namespace gl
 					.type(gl::texture::type::uint_8_8_8_8)
 					.wrap(gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border)
 					.swizzle(gl::texture::channel::a, gl::texture::channel::b, gl::texture::channel::g, gl::texture::channel::r)
+					.filter(gl::min_filter::linear, gl::filter::linear)
 					.apply();
 				tex->copy_from(res->data, gl::texture::format::rgba, gl::texture::type::uint_8_8_8_8);
 				resources.push_back(std::move(tex));
@@ -420,6 +421,7 @@ namespace gl
 				.internal_format(gl::texture::internal_format::r8)
 				.wrap(gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border)
 				.swizzle(gl::texture::channel::r, gl::texture::channel::r, gl::texture::channel::r, gl::texture::channel::r)
+				.filter(gl::min_filter::linear, gl::filter::linear)
 				.apply();
 			tex->copy_from(font->glyph_data.data(), gl::texture::format::r, gl::texture::type::ubyte);
 

@@ -155,7 +155,7 @@ namespace rsx
 			void update(std::string current_fps)
 			{
 				m_display.text = current_fps;
-				m_display.render();
+				m_display.refresh();
 			}
 
 			compiled_resource get_compiled() override

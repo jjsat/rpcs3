@@ -370,7 +370,7 @@ namespace rsx
 			overlay_element() {}
 			overlay_element(u16 _w, u16 _h) : w(_w), h(_h) {}
 
-			virtual void render()
+			virtual void refresh()
 			{
 				//Just invalidate for draw when get_compiled() is called
 				is_compiled = false;
@@ -879,10 +879,10 @@ namespace rsx
 				m_highlight_box->h = current_element->h + padding;
 				m_highlight_box->y -= scroll_distance;
 
-				m_highlight_box->render();
-				m_scroll_indicator_top->render();
-				m_scroll_indicator_bottom->render();
-				render();
+				m_highlight_box->refresh();
+				m_scroll_indicator_top->refresh();
+				m_scroll_indicator_bottom->refresh();
+				refresh();
 			}
 
 			void select_next()

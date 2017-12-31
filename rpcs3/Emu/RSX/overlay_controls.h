@@ -171,6 +171,12 @@ namespace rsx
 				{
 					if (char c = text[i++])
 					{
+						if (c >= char_count)
+						{
+							//Unsupported glyph, render null for now
+							c = ' ';
+						}
+
 						auto quad = get_char(c, x_advance, y_advance);
 						result.push_back({ quad.x0, quad.y0, quad.s0, quad.t0 });
 						result.push_back({ quad.x1, quad.y0, quad.s1, quad.t0 });

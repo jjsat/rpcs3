@@ -41,10 +41,19 @@ namespace rsx
 			bool exit = false;
 
 			virtual compiled_resource get_compiled() = 0;
-			virtual void on_button_pressed(pad_button button_press) {};
 
 			void close();
 			void refresh();
+
+			virtual void on_button_pressed(pad_button button_press)
+			{
+				switch (button_press)
+				{
+				case pad_button::circle:
+					close();
+					break;
+				}
+			};
 
 			s32 run_input_loop()
 			{
@@ -294,6 +303,73 @@ namespace rsx
 					return selection_code::new_save;
 
 				return return_code;
+			}
+		};
+
+		struct message_dialog : public user_interface
+		{
+			label text_display;
+			image_button btn_ok;
+			image_button btn_cancel;
+
+			overlay_element bottom_bar, background;
+			bool interactive = false;
+
+			message_dialog()
+			{
+				background.set_size(1280, 720);
+				background.back_color.a = 0.85f;
+
+				text_display.set_size(1200, 40);
+				text_display.set_pos(40, 350);
+				text_display.set_font("Arial", 16);
+
+				bottom_bar.back_color = color4f(1.f, 1.f, 1.f, 1.f);
+				bottom_bar.set_size(1200, 2);
+				bottom_bar.set_pos(40, 400);
+
+				btn_ok.image_resource_ref = resource_config::standard_image_resource::cross;
+				btn_ok.set_text("Accept");
+				btn_ok.set_size(120, 30);
+				btn_ok.set_pos(40, 420);
+				btn_ok.set_font("Arial", 16);
+
+				btn_cancel.image_resource_ref = resource_config::standard_image_resource::circle;
+				btn_cancel.set_text("Cancel");
+				btn_cancel.set_size(120, 30);
+				btn_cancel.set_pos(180, 420);
+				btn_cancel.set_font("Arial", 16);
+			}
+
+			compiled_resource get_compiled() override
+			{
+				compiled_resource result;
+				result.add(background.get_compiled());
+				result.add(text_display.get_compiled());
+				result.add(bottom_bar.get_compiled());
+
+				if (interactive)
+				{
+					result.add(btn_ok.get_compiled());
+					result.add(btn_cancel.get_compiled());
+				}
+
+				return result;
+			}
+
+			void show(std::string text, bool interactive)
+			{
+				text_display.set_text(text.c_str());
+
+				auto w = text_display.measure_text_width();
+				auto loc = (w < virtual_width) ? (virtual_width - w) / 2 : 0;
+				text_display.set_pos(loc, text_display.y);
+
+				this->interactive = interactive;
+				if (interactive)
+				{
+					run_input_loop();
+				}
 			}
 		};
 	}

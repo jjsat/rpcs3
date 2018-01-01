@@ -7,12 +7,9 @@
 s32 save_data_dialog::ShowSaveDataList(std::vector<SaveDataEntry>& save_entries, s32 focused, u32 op, vm::ptr<CellSaveDataListSet> listSet)
 {
 	//TODO: Install native shell as an Emu callback
-	auto rsxthr = fxm::get<GSRender>();
-	rsx::overlays::save_dialog *native_dlg = nullptr;
-
-	if (rsxthr)
+	if (auto rsxthr = fxm::get<GSRender>())
 	{
-		if (native_dlg = rsxthr->shell_open_save_dialog())
+		if (auto native_dlg = rsxthr->shell_open_save_dialog())
 		{
 			auto result = native_dlg->run(save_entries, op, listSet);
 			if (result != rsx::overlays::user_interface::selection_code::error)

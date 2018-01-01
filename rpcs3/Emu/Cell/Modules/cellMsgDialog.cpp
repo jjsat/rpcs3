@@ -2,6 +2,7 @@
 #include "Emu/System.h"
 #include "Emu/IdManager.h"
 #include "Emu/Cell/PPUModule.h"
+#include "Emu/RSX/GSRender.h"
 
 #include "cellSysutil.h"
 #include "cellMsgDialog.h"
@@ -104,16 +105,31 @@ s32 cellMsgDialogOpen2(u32 type, vm::cptr<char> msgString, vm::ptr<CellMsgDialog
 
 	atomic_t<bool> result(false);
 
-	// Run asynchronously in GUI thread
-	Emu.CallAfter([&]()
+	if (_type.progress_bar_count == 0)
 	{
-		dlg->Create(msgString.get_ptr());
-		result = true;
-	});
+		if (auto rsxthr = fxm::get<GSRender>())
+		{
+			if (auto dlg = rsxthr->shell_open_message_dialog())
+			{
+				dlg->show(msgString.get_ptr(), _type.button_type.unshifted() != CELL_MSGDIALOG_BUTTON_NONE);
+				result = true;
+			}
+		}
+	}
 
-	while (!result)
+	if (!result)
 	{
-		thread_ctrl::wait_for(1000);
+		// Run asynchronously in GUI thread
+		Emu.CallAfter([&]()
+		{
+			dlg->Create(msgString.get_ptr());
+			result = true;
+		});
+
+		while (!result)
+		{
+			thread_ctrl::wait_for(1000);
+		}
 	}
 
 	return CELL_OK;
@@ -217,6 +233,14 @@ s32 cellMsgDialogClose(f32 delay)
 
 	if (!dlg)
 	{
+		if (auto rsxthr = fxm::get<GSRender>())
+		{
+			if (rsxthr->shell_close_dialog())
+			{
+				return CELL_OK;
+			}
+		}
+
 		return CELL_MSGDIALOG_ERROR_DIALOG_NOT_OPENED;
 	}
 
@@ -247,6 +271,14 @@ s32 cellMsgDialogAbort()
 
 	if (!dlg)
 	{
+		if (auto rsxthr = fxm::get<GSRender>())
+		{
+			if (rsxthr->shell_close_dialog())
+			{
+				return CELL_OK;
+			}
+		}
+
 		return CELL_MSGDIALOG_ERROR_DIALOG_NOT_OPENED;
 	}
 

@@ -100,6 +100,7 @@ namespace rsx
 
 			f32 size_pt = 12.f;
 			f32 size_px = 16.f; //Default font 12pt size
+			f32 em_size = 0.f;
 			std::string font_name;
 			std::vector<stbtt_packedchar> pack_info;
 			std::vector<u8> glyph_data;
@@ -143,6 +144,9 @@ namespace rsx
 				}
 
 				stbtt_PackEnd(&context);
+
+				f32 unused;
+				get_char('m', em_size, unused);
 
 				font_name = ttf_name;
 				initialized = true;
@@ -501,6 +505,14 @@ namespace rsx
 				}
 
 				return compiled_resources;
+			}
+
+			u16 measure_text_width() const
+			{
+				auto renderer = font;
+				if (!renderer) renderer = fontmgr::get("Arial", 12);
+
+				return renderer->em_size * text.length();
 			}
 		};
 

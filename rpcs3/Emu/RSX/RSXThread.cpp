@@ -2191,12 +2191,29 @@ namespace rsx
 		}
 	}
 
-	void thread::shell_close_dialog()
+	rsx::overlays::message_dialog* thread::shell_open_message_dialog()
 	{
 		if (supports_native_ui)
 		{
+			auto ptr = new rsx::overlays::message_dialog();
+			m_custom_ui.reset(ptr);
+			return ptr;
+		}
+		else
+		{
+			return nullptr;
+		}
+	}
+
+	bool thread::shell_close_dialog()
+	{
+		if (m_custom_ui)
+		{
 			m_custom_ui.reset();
 			shell_do_cleanup();
+			return true;
 		}
+
+		return false;
 	}
 }

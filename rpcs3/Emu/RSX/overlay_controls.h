@@ -181,11 +181,28 @@ namespace rsx
 							c = ' ';
 						}
 
-						auto quad = get_char(c, x_advance, y_advance);
-						result.push_back({ quad.x0, quad.y0, quad.s0, quad.t0 });
-						result.push_back({ quad.x1, quad.y0, quad.s1, quad.t0 });
-						result.push_back({ quad.x0, quad.y1, quad.s0, quad.t1 });
-						result.push_back({ quad.x1, quad.y1, quad.s1, quad.t1 });
+						switch (c)
+						{
+						case '\n':
+						{
+							y_advance += size_px + 2.f;
+							x_advance = 0.f;
+							continue;
+						}
+						case '\r':
+						{
+							x_advance = 0.f;
+							continue;
+						}
+						default:
+						{
+							auto quad = get_char(c, x_advance, y_advance);
+							result.push_back({ quad.x0, quad.y0, quad.s0, quad.t0 });
+							result.push_back({ quad.x1, quad.y0, quad.s1, quad.t0 });
+							result.push_back({ quad.x0, quad.y1, quad.s0, quad.t1 });
+							result.push_back({ quad.x1, quad.y1, quad.s1, quad.t1 });
+						}
+						}
 					}
 					else
 					{
@@ -357,6 +374,12 @@ namespace rsx
 
 		struct overlay_element
 		{
+			enum text_align
+			{
+				left = 0,
+				center
+			};
+
 			u16 x = 0;
 			u16 y = 0;
 			u16 w = 0;
@@ -364,6 +387,7 @@ namespace rsx
 
 			std::string text;
 			font* font = nullptr;
+			text_align alignment = left;
 
 			color4f back_color = { 0.f, 0.f, 0.f, 1.f };
 			color4f fore_color = { 1.f, 1.f, 1.f, 1.f };
@@ -458,18 +482,72 @@ namespace rsx
 				is_compiled = false;
 			}
 
+			virtual void align_text(text_align align)
+			{
+				alignment = align;
+				is_compiled = false;
+			}
+
 			virtual std::vector<vertex> render_text(const char *string, f32 x, f32 y)
 			{
 				auto renderer = font;
 				if (!renderer) renderer = fontmgr::get("Arial", 12);
 
+				f32 text_extents_w = 0.f;
 				std::vector<vertex> result = renderer->render_text(string);
 				for (auto &v : result)
 				{
+					//Check for real text region extent
+					//TODO: Ellipsis
+					text_extents_w = std::max(v.values[0], text_extents_w);
+
 					//Apply transform.
 					//(0, 0) has text sitting 50% off the top left corner (text is outside the rect) hence the offset by text height / 2
 					v.values[0] += x + padding_left;
 					v.values[1] += y + padding_top + (f32)renderer->size_px * 0.5f;
+				}
+
+				if (alignment == center)
+				{
+					//Scan for lines and measure them
+					//Reposition them to the center
+					std::vector<std::pair<u32, u32>> lines;
+					u32 line_begin = 0;
+					u32 ctr = 0;
+
+					for (auto c : text)
+					{
+						switch (c)
+						{
+						case '\r':
+							continue;
+						case '\n':
+							lines.push_back({ line_begin, ctr });
+							line_begin = ctr;
+							continue;
+						default:
+							ctr+=4;
+						}
+					}
+
+					lines.push_back({ line_begin, ctr });
+					const auto max_region_w = std::max<f32>(text_extents_w, w);
+
+					for (auto p : lines)
+					{
+						if (p.first >= p.second)
+							continue;
+
+						f32 line_length = result[p.second - 1].values[0] - result[p.first].values[0];
+						if (line_length < max_region_w)
+						{
+							f32 offset = (max_region_w - line_length) * 0.5f;
+							for (auto n = p.first; n < p.second; ++n)
+							{
+								result[n].values[0] += offset;
+							}
+						}
+					}
 				}
 
 				return result;
@@ -507,12 +585,25 @@ namespace rsx
 				return compiled_resources;
 			}
 
-			u16 measure_text_width() const
+			void measure_text(u16& width, u16& height) const
 			{
 				auto renderer = font;
 				if (!renderer) renderer = fontmgr::get("Arial", 12);
 
-				return renderer->em_size * text.length();
+				f32 w = 0.f;
+				f32 unused = 0.f;
+				for (auto c : text)
+				{
+					if (c == '\n')
+					{
+						height += renderer->size_px + 2;
+						continue;
+					}
+
+					renderer->get_char(c, w, unused);
+				}
+
+				width = (u16)w;
 			}
 		};
 

@@ -2168,7 +2168,13 @@ namespace rsx
 	void thread::pause()
 	{
 		external_interrupt_lock.store(true);
-		while (!external_interrupt_ack.load()) _mm_pause();
+		while (!external_interrupt_ack.load())
+		{
+			if (Emu.IsStopped())
+				break;
+
+			_mm_pause();
+		}
 		external_interrupt_ack.store(false);
 	}
 

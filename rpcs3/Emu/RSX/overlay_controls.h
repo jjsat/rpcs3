@@ -587,6 +587,12 @@ namespace rsx
 
 			void measure_text(u16& width, u16& height) const
 			{
+				if (text.empty())
+				{
+					width = height = 0;
+					return;
+				}
+
 				auto renderer = font;
 				if (!renderer) renderer = fontmgr::get("Arial", 12);
 
@@ -886,6 +892,92 @@ namespace rsx
 			void auto_resize()
 			{
 				measure_text(w, h);
+			}
+		};
+
+		struct progress_bar : public overlay_element
+		{
+		private:
+			overlay_element indicator;
+			label text_view;
+
+			f32 m_limit = 100.f;
+			f32 m_value = 0.f;
+
+		public:
+			using overlay_element::overlay_element;
+
+			void inc(f32 value)
+			{
+				set_value(m_value + value);
+			}
+
+			void dec(f32 value)
+			{
+				set_value(m_value - value);
+			}
+
+			void set_limit(f32 limit)
+			{
+				m_limit = limit;
+				is_compiled = false;
+			}
+
+			void set_value(f32 value)
+			{
+				m_value = value;
+				f32 indicator_width = (w * m_value) / m_limit;
+				indicator.set_size((u16)indicator_width, h);
+			}
+
+			void set_pos(u16 _x, u16 _y) override
+			{
+				u16 text_w, text_h;
+				text_view.measure_text(text_w, text_h);
+
+				overlay_element::set_pos(_x, _y + text_h);
+				indicator.set_pos(_x, _y + text_h);
+				text_view.set_pos(_x, _y);
+			}
+
+			void set_size(u16 _w, u16 _h) override
+			{
+				overlay_element::set_size(_w, _h);
+				text_view.set_size(_w, text_view.h);
+				set_value(m_value);
+			}
+
+			void translate(s16 dx, s16 dy) override
+			{
+				set_pos(x + dx, y + dy);
+			}
+
+			void set_text(const char* str) override
+			{
+				text_view.set_text(str);
+				text_view.align_text(text_align::center);
+				text_view.auto_resize();
+			}
+
+			void set_text(std::string& str) override
+			{
+				text_view.set_text(str);
+				text_view.align_text(text_align::center);
+				text_view.auto_resize();
+			}
+
+			compiled_resource& get_compiled() override
+			{
+				if (!is_compiled)
+				{
+					auto compiled = overlay_element::get_compiled();
+
+					indicator.back_color = fore_color;
+					indicator.refresh();
+					compiled.add(indicator.get_compiled());
+				}
+
+				return compiled_resources;
 			}
 		};
 

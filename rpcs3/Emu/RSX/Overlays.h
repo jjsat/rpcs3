@@ -197,6 +197,9 @@ namespace rsx
 					subtext->text = text2;
 					subtext->font = fontmgr::get("Arial", 14);
 
+					//Auto-resize save details label
+					static_cast<label*>(subtext.get())->auto_resize();
+
 					//Make back color transparent for text
 					header_text->back_color.a = 0.f;
 					subtext->back_color.a = 0.f;
@@ -335,13 +338,13 @@ namespace rsx
 				btn_ok.image_resource_ref = resource_config::standard_image_resource::cross;
 				btn_ok.set_text("Yes");
 				btn_ok.set_size(120, 30);
-				btn_ok.set_pos(510, 420);
+				btn_ok.set_pos(560, 420);
 				btn_ok.set_font("Arial", 16);
 
 				btn_cancel.image_resource_ref = resource_config::standard_image_resource::circle;
 				btn_cancel.set_text("No");
 				btn_cancel.set_size(120, 30);
-				btn_cancel.set_pos(650, 420);
+				btn_cancel.set_pos(700, 420);
 				btn_cancel.set_font("Arial", 16);
 			}
 

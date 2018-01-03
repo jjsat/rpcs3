@@ -882,6 +882,11 @@ namespace rsx
 			{
 				this->text = text;
 			}
+
+			void auto_resize()
+			{
+				measure_text(w, h);
+			}
 		};
 
 		struct list_view : public vertical_layout

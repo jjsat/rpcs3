@@ -338,8 +338,8 @@ namespace rsx
 				bottom_bar.set_size(1200, 2);
 				bottom_bar.set_pos(40, 400);
 
-				progress_1.set_size(1200, 10);
-				progress_2.set_size(1200, 10);
+				progress_1.set_size(1200, 4);
+				progress_2.set_size(1200, 4);
 
 				btn_ok.image_resource_ref = resource_config::standard_image_resource::cross;
 				btn_ok.set_text("Yes");
@@ -413,13 +413,13 @@ namespace rsx
 				num_progress_bars = num_progress;
 				if (num_progress_bars)
 				{
-					u16 offset = 30;
+					u16 offset = 25;
 					progress_1.set_pos(40, 400);
 
 					if (num_progress_bars > 1)
 					{
-						progress_2.set_pos(40, 412);
-						offset = 60;
+						progress_2.set_pos(40, 425);
+						offset = 50;
 					}
 
 					//Push the other stuff down

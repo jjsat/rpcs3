@@ -925,9 +925,16 @@ namespace rsx
 
 			void set_value(f32 value)
 			{
-				m_value = value;
+				if (value < 0.f)
+					m_value = 0.f;
+				else if (value > m_limit)
+					m_value = m_limit;
+				else
+					m_value = value;
+
 				f32 indicator_width = (w * m_value) / m_limit;
 				indicator.set_size((u16)indicator_width, h);
+				is_compiled = false;
 			}
 
 			void set_pos(u16 _x, u16 _y) override
@@ -957,6 +964,7 @@ namespace rsx
 				text_view.set_text(str);
 				text_view.align_text(text_align::center);
 				text_view.auto_resize();
+				is_compiled = false;
 			}
 
 			void set_text(std::string& str) override
@@ -964,13 +972,14 @@ namespace rsx
 				text_view.set_text(str);
 				text_view.align_text(text_align::center);
 				text_view.auto_resize();
+				is_compiled = false;
 			}
 
 			compiled_resource& get_compiled() override
 			{
 				if (!is_compiled)
 				{
-					auto compiled = overlay_element::get_compiled();
+					auto& compiled = overlay_element::get_compiled();
 
 					indicator.back_color = fore_color;
 					indicator.refresh();

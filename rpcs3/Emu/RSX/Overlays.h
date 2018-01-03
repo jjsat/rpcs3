@@ -3,9 +3,11 @@
 
 #include "../Io/PadHandler.h"
 #include "Emu/Memory/vm.h"
-#include "Emu/Cell/Modules/cellSaveData.h"
 #include "Emu/IdManager.h"
 #include "pad_thread.h"
+
+#include "Emu/Cell/Modules/cellSaveData.h"
+#include "Emu/Cell/Modules/cellMsgDialog.h"
 
 // Definition of user interface implementations
 namespace rsx
@@ -47,12 +49,7 @@ namespace rsx
 
 			virtual void on_button_pressed(pad_button button_press)
 			{
-				switch (button_press)
-				{
-				case pad_button::circle:
-					close();
-					break;
-				}
+				close();
 			};
 
 			s32 run_input_loop()
@@ -146,6 +143,9 @@ namespace rsx
 
 					refresh();
 				}
+
+				//Unreachable
+				return 0;
 			}
 		};
 
@@ -313,31 +313,35 @@ namespace rsx
 			image_button btn_cancel;
 
 			overlay_element bottom_bar, background;
+
+			s32 return_code = CELL_MSGDIALOG_BUTTON_ESCAPE;
 			bool interactive = false;
+			bool ok_only = false;
 
 			message_dialog()
 			{
 				background.set_size(1280, 720);
 				background.back_color.a = 0.85f;
 
-				text_display.set_size(1200, 40);
-				text_display.set_pos(40, 350);
+				text_display.set_size(1280, 40);
+				text_display.set_pos(0, 350);
 				text_display.set_font("Arial", 16);
+				text_display.align_text(overlay_element::text_align::center);
 
 				bottom_bar.back_color = color4f(1.f, 1.f, 1.f, 1.f);
 				bottom_bar.set_size(1200, 2);
 				bottom_bar.set_pos(40, 400);
 
 				btn_ok.image_resource_ref = resource_config::standard_image_resource::cross;
-				btn_ok.set_text("Accept");
+				btn_ok.set_text("Yes");
 				btn_ok.set_size(120, 30);
-				btn_ok.set_pos(40, 420);
+				btn_ok.set_pos(510, 420);
 				btn_ok.set_font("Arial", 16);
 
 				btn_cancel.image_resource_ref = resource_config::standard_image_resource::circle;
-				btn_cancel.set_text("Cancel");
+				btn_cancel.set_text("No");
 				btn_cancel.set_size(120, 30);
-				btn_cancel.set_pos(180, 420);
+				btn_cancel.set_pos(650, 420);
 				btn_cancel.set_font("Arial", 16);
 			}
 
@@ -351,25 +355,77 @@ namespace rsx
 				if (interactive)
 				{
 					result.add(btn_ok.get_compiled());
-					result.add(btn_cancel.get_compiled());
+
+					if (!ok_only)
+						result.add(btn_cancel.get_compiled());
 				}
 
 				return result;
 			}
 
-			void show(std::string text, bool interactive)
+			void on_button_pressed(pad_button button_press) override
+			{
+				switch (button_press)
+				{
+				case pad_button::cross:
+				{
+					if (ok_only)
+						return_code = CELL_MSGDIALOG_BUTTON_OK;
+					else
+						return_code = CELL_MSGDIALOG_BUTTON_YES;
+
+					break;
+				}
+				case pad_button::circle:
+				{
+					if (ok_only)
+						//TODO: Support cancel operation
+						return;
+					else
+						return_code = CELL_MSGDIALOG_BUTTON_NO;
+
+					break;
+				}
+				default:
+					return;
+				}
+
+				close();
+			}
+
+			s32 show(std::string text, u32 type)
 			{
 				text_display.set_text(text.c_str());
 
-				auto w = text_display.measure_text_width();
-				auto loc = (w < virtual_width) ? (virtual_width - w) / 2 : 0;
-				text_display.set_pos(loc, text_display.y);
+				u16 text_w, text_h;
+				text_display.measure_text(text_w, text_h);
+				text_display.translate(0, -(text_h - 16));
 
-				this->interactive = interactive;
+				switch (type)
+				{
+				case CELL_MSGDIALOG_TYPE_BUTTON_TYPE_NONE:
+					interactive = false;
+					break;
+				case CELL_MSGDIALOG_TYPE_BUTTON_TYPE_OK:
+					btn_ok.set_pos(600, 420);
+					btn_ok.set_text("OK");
+					interactive = true;
+					ok_only = true;
+					break;
+				case CELL_MSGDIALOG_TYPE_BUTTON_TYPE_YESNO:
+					interactive = true;
+					break;
+				}
+
 				if (interactive)
 				{
-					run_input_loop();
+					if (auto error = run_input_loop())
+						return error;
+
+					return return_code;
 				}
+
+				return CELL_MSGDIALOG_BUTTON_NONE;
 			}
 		};
 	}

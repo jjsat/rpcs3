@@ -105,14 +105,30 @@ s32 cellMsgDialogOpen2(u32 type, vm::cptr<char> msgString, vm::ptr<CellMsgDialog
 
 	atomic_t<bool> result(false);
 
-	if (_type.progress_bar_count == 0)
+	if (_type.progress_bar_count < 1)
 	{
 		if (auto rsxthr = fxm::get<GSRender>())
 		{
 			if (auto dlg = rsxthr->shell_open_message_dialog())
 			{
-				dlg->show(msgString.get_ptr(), _type.button_type.unshifted() != CELL_MSGDIALOG_BUTTON_NONE);
-				result = true;
+				auto status = dlg->show(msgString.get_ptr(), _type.button_type.unshifted());
+				if (status >= 0)
+				{
+					if (callback)
+					{
+						sysutil_register_cb([=](ppu_thread& ppu) -> s32
+						{
+							callback(ppu, status, userData);
+							return CELL_OK;
+						});
+					}
+					result = true;
+				}
+				else
+				{
+					if (Emu.IsStopped())
+						return CELL_OK;
+				}
 			}
 		}
 	}

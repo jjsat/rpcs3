@@ -6,6 +6,7 @@
 #include "Emu/IdManager.h"
 #include "pad_thread.h"
 
+#include "Emu/Cell/ErrorCodes.h"
 #include "Emu/Cell/Modules/cellSaveData.h"
 #include "Emu/Cell/Modules/cellMsgDialog.h"
 
@@ -316,6 +317,8 @@ namespace rsx
 			image_button btn_cancel;
 
 			overlay_element bottom_bar, background;
+			progress_bar progress_1, progress_2;
+			u8 num_progress_bars = 0;
 
 			s32 return_code = CELL_MSGDIALOG_BUTTON_ESCAPE;
 			bool interactive = false;
@@ -335,6 +338,9 @@ namespace rsx
 				bottom_bar.set_size(1200, 2);
 				bottom_bar.set_pos(40, 400);
 
+				progress_1.set_size(1200, 10);
+				progress_2.set_size(1200, 10);
+
 				btn_ok.image_resource_ref = resource_config::standard_image_resource::cross;
 				btn_ok.set_text("Yes");
 				btn_ok.set_size(120, 30);
@@ -353,10 +359,16 @@ namespace rsx
 				compiled_resource result;
 				result.add(background.get_compiled());
 				result.add(text_display.get_compiled());
-				result.add(bottom_bar.get_compiled());
+
+				if (num_progress_bars > 0)
+					result.add(progress_1.get_compiled());
+
+				if (num_progress_bars > 1)
+					result.add(progress_2.get_compiled());
 
 				if (interactive)
 				{
+					result.add(bottom_bar.get_compiled());
 					result.add(btn_ok.get_compiled());
 
 					if (!ok_only)
@@ -396,8 +408,26 @@ namespace rsx
 				close();
 			}
 
-			s32 show(std::string text, u32 type)
+			s32 show(std::string text, u32 type, u8 num_progress)
 			{
+				num_progress_bars = num_progress;
+				if (num_progress_bars)
+				{
+					u16 offset = 30;
+					progress_1.set_pos(40, 400);
+
+					if (num_progress_bars > 1)
+					{
+						progress_2.set_pos(40, 412);
+						offset = 60;
+					}
+
+					//Push the other stuff down
+					bottom_bar.translate(0, offset);
+					btn_ok.translate(0, offset);
+					btn_cancel.translate(0, offset);
+				}
+
 				text_display.set_text(text.c_str());
 
 				u16 text_w, text_h;
@@ -428,7 +458,46 @@ namespace rsx
 					return return_code;
 				}
 
-				return CELL_MSGDIALOG_BUTTON_NONE;
+				return CELL_OK;
+			}
+
+			s32 progress_bar_set_message(u32 index, const char* msg)
+			{
+				if (index >= num_progress_bars)
+					return CELL_MSGDIALOG_ERROR_PARAM;
+
+				if (index == 0)
+					progress_1.set_text(msg);
+				else
+					progress_2.set_text(msg);
+
+				return CELL_OK;
+			}
+
+			s32 progress_bar_increment(u32 index, f32 value)
+			{
+				if (index >= num_progress_bars)
+					return CELL_MSGDIALOG_ERROR_PARAM;
+
+				if (index == 0)
+					progress_1.inc(value);
+				else
+					progress_2.inc(value);
+
+				return CELL_OK;
+			}
+
+			s32 progress_bar_reset(u32 index)
+			{
+				if (index >= num_progress_bars)
+					return CELL_MSGDIALOG_ERROR_PARAM;
+
+				if (index == 0)
+					progress_1.set_value(0.f);
+				else
+					progress_2.set_value(0.f);
+
+				return CELL_OK;
 			}
 		};
 	}

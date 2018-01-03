@@ -105,30 +105,27 @@ s32 cellMsgDialogOpen2(u32 type, vm::cptr<char> msgString, vm::ptr<CellMsgDialog
 
 	atomic_t<bool> result(false);
 
-	if (_type.progress_bar_count < 1)
+	if (auto rsxthr = fxm::get<GSRender>())
 	{
-		if (auto rsxthr = fxm::get<GSRender>())
+		if (auto dlg = rsxthr->shell_open_message_dialog())
 		{
-			if (auto dlg = rsxthr->shell_open_message_dialog())
+			auto status = dlg->show(msgString.get_ptr(), _type.button_type.unshifted(), _type.progress_bar_count);
+			if (status >= 0)
 			{
-				auto status = dlg->show(msgString.get_ptr(), _type.button_type.unshifted());
-				if (status >= 0)
+				if (callback)
 				{
-					if (callback)
+					sysutil_register_cb([=](ppu_thread& ppu) -> s32
 					{
-						sysutil_register_cb([=](ppu_thread& ppu) -> s32
-						{
-							callback(ppu, status, userData);
-							return CELL_OK;
-						});
-					}
-					result = true;
-				}
-				else
-				{
-					if (Emu.IsStopped())
+						callback(ppu, status, userData);
 						return CELL_OK;
+					});
 				}
+				result = true;
+			}
+			else
+			{
+				if (Emu.IsStopped())
+					return CELL_OK;
 			}
 		}
 	}
@@ -245,18 +242,18 @@ s32 cellMsgDialogClose(f32 delay)
 {
 	cellSysutil.warning("cellMsgDialogClose(delay=%f)", delay);
 
+	if (auto rsxthr = fxm::get<GSRender>())
+	{
+		if (rsxthr->shell_close_dialog())
+		{
+			return CELL_OK;
+		}
+	}
+
 	const auto dlg = fxm::get<MsgDialogBase>();
 
 	if (!dlg)
 	{
-		if (auto rsxthr = fxm::get<GSRender>())
-		{
-			if (rsxthr->shell_close_dialog())
-			{
-				return CELL_OK;
-			}
-		}
-
 		return CELL_MSGDIALOG_ERROR_DIALOG_NOT_OPENED;
 	}
 
@@ -283,18 +280,18 @@ s32 cellMsgDialogAbort()
 {
 	cellSysutil.warning("cellMsgDialogAbort()");
 
+	if (auto rsxthr = fxm::get<GSRender>())
+	{
+		if (rsxthr->shell_close_dialog())
+		{
+			return CELL_OK;
+		}
+	}
+
 	const auto dlg = fxm::get<MsgDialogBase>();
 
 	if (!dlg)
 	{
-		if (auto rsxthr = fxm::get<GSRender>())
-		{
-			if (rsxthr->shell_close_dialog())
-			{
-				return CELL_OK;
-			}
-		}
-
 		return CELL_MSGDIALOG_ERROR_DIALOG_NOT_OPENED;
 	}
 
@@ -310,6 +307,15 @@ s32 cellMsgDialogAbort()
 s32 cellMsgDialogProgressBarSetMsg(u32 progressBarIndex, vm::cptr<char> msgString)
 {
 	cellSysutil.warning("cellMsgDialogProgressBarSetMsg(progressBarIndex=%d, msgString=%s)", progressBarIndex, msgString);
+
+	if (auto rsxthr = fxm::get<GSRender>())
+	{
+		if (auto dlg2 = rsxthr->shell_get_current_dialog())
+		{
+			if (auto casted = dynamic_cast<rsx::overlays::message_dialog*>(dlg2))
+				return casted->progress_bar_set_message(progressBarIndex, msgString.get_ptr());
+		}
+	}
 
 	const auto dlg = fxm::get<MsgDialogBase>();
 
@@ -335,6 +341,15 @@ s32 cellMsgDialogProgressBarReset(u32 progressBarIndex)
 {
 	cellSysutil.warning("cellMsgDialogProgressBarReset(progressBarIndex=%d)", progressBarIndex);
 
+	if (auto rsxthr = fxm::get<GSRender>())
+	{
+		if (auto dlg2 = rsxthr->shell_get_current_dialog())
+		{
+			if (auto casted = dynamic_cast<rsx::overlays::message_dialog*>(dlg2))
+				return casted->progress_bar_reset(progressBarIndex);
+		}
+	}
+
 	const auto dlg = fxm::get<MsgDialogBase>();
 
 	if (!dlg)
@@ -358,6 +373,15 @@ s32 cellMsgDialogProgressBarReset(u32 progressBarIndex)
 s32 cellMsgDialogProgressBarInc(u32 progressBarIndex, u32 delta)
 {
 	cellSysutil.warning("cellMsgDialogProgressBarInc(progressBarIndex=%d, delta=%d)", progressBarIndex, delta);
+
+	if (auto rsxthr = fxm::get<GSRender>())
+	{
+		if (auto dlg2 = rsxthr->shell_get_current_dialog())
+		{
+			if (auto casted = dynamic_cast<rsx::overlays::message_dialog*>(dlg2))
+				return casted->progress_bar_increment(progressBarIndex, (f32)delta);
+		}
+	}
 
 	const auto dlg = fxm::get<MsgDialogBase>();
 

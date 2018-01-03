@@ -2183,6 +2183,8 @@ namespace rsx
 		external_interrupt_lock.store(false);
 	}
 
+	//TODO: Move these helpers into a better class dedicated to shell interface handling (use idm?)
+	//They are not dependent on rsx at all
 	rsx::overlays::save_dialog* thread::shell_open_save_dialog()
 	{
 		if (supports_native_ui)
@@ -2209,6 +2211,11 @@ namespace rsx
 		{
 			return nullptr;
 		}
+	}
+
+	rsx::overlays::user_interface* thread::shell_get_current_dialog()
+	{
+		return m_custom_ui.get();
 	}
 
 	bool thread::shell_close_dialog()

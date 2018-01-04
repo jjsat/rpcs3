@@ -525,14 +525,14 @@ namespace rsx
 			trophy_notification()
 			{
 				frame.set_pos(0, 0);
-				frame.set_size(250, 80);
+				frame.set_size(260, 80);
 				frame.back_color.a = 0.85f;
 
 				image.set_pos(8, 8);
 				image.set_size(64, 64);
 				image.back_color.a = 0.f;
 
-				text_view.set_pos(72, 0);
+				text_view.set_pos(90, 0);
 				text_view.set_padding(0.f, 0.f, 25.f, 0.f);
 				text_view.set_font("Arial", 8);
 				text_view.align_text(overlay_element::text_align::center);

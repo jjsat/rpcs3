@@ -605,18 +605,22 @@ namespace rsx
 
 				f32 w = 0.f;
 				f32 unused = 0.f;
+				f32 max_w = 0.f;
 				for (auto c : text)
 				{
 					if (c == '\n')
 					{
 						height += renderer->size_px + 2;
+						max_w = std::max(max_w, w);
+						w = 0.f;
 						continue;
 					}
 
 					renderer->get_char(c, w, unused);
 				}
 
-				width = (u16)w;
+				max_w = std::max(max_w, w);
+				width = (u16)max_w;
 			}
 		};
 

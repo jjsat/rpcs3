@@ -2000,6 +2000,14 @@ void VKGSRender::process_swap_request(frame_context_t *ctx, bool free_resources)
 
 void VKGSRender::do_local_task()
 {
+	//TODO: Guard this
+	if (m_overlay_cleanup_requests.size())
+	{
+		flush_command_queue(true);
+		m_ui_renderer->remove_temp_resources();
+		m_overlay_cleanup_requests.clear();
+	}
+
 	if (m_flush_commands)
 	{
 		std::lock_guard<std::mutex> lock(m_flush_queue_mutex);
@@ -3136,4 +3144,10 @@ void VKGSRender::get_occlusion_query_result(rsx::occlusion_query_info* query)
 
 	m_occlusion_query_pool.reset_queries(*m_current_command_buffer, data.indices);
 	m_occlusion_map.erase(query->driver_handle);
+}
+
+void VKGSRender::shell_do_cleanup()
+{
+	//TODO: Guard this
+	m_overlay_cleanup_requests.push_back(0);
 }

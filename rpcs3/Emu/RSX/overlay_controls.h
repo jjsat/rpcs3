@@ -19,6 +19,7 @@ namespace rsx
 		{
 			//NOTE: 1 - 252 are user defined
 			none = 0,         //No image
+			raw_image= 252,   //Raw image data passed via image_info struct
 			font_file = 253,  //Font file
 			game_icon = 254,  //Use game icon
 			backbuffer = 255  //Use current backbuffer contents
@@ -255,32 +256,37 @@ namespace rsx
 			}
 		};
 
+		struct image_info
+		{
+			int w = 0, h = 0;
+			int bpp = 0;
+			u8* data = nullptr;
+
+			image_info(image_info&) = delete;
+
+			image_info(const char* filename)
+			{
+				std::vector<u8> bytes;
+				fs::file f(filename);
+				f.read(bytes, f.size());
+				data = stbi_load_from_memory(bytes.data(), (s32)f.size(), &w, &h, &bpp, STBI_rgb_alpha);
+			}
+
+			image_info(const std::vector<u8>& bytes)
+			{
+				data = stbi_load_from_memory(bytes.data(), (s32)bytes.size(), &w, &h, &bpp, STBI_rgb_alpha);
+			}
+
+			~image_info()
+			{
+				stbi_image_free(data);
+				data = nullptr;
+				w = h = bpp = 0;
+			}
+		};
+
 		struct resource_config
 		{
-			struct image_info
-			{
-				int w = 0, h = 0;
-				int bpp = 0;
-				u8* data = nullptr;
-
-				image_info(image_info&) = delete;
-
-				image_info(const char* filename)
-				{
-					std::vector<u8> bytes;
-					fs::file f(filename);
-					f.read(bytes, f.size());
-					data = stbi_load_from_memory(bytes.data(), (s32)f.size(), &w, &h, &bpp, STBI_rgb_alpha);
-				}
-
-				~image_info()
-				{
-					stbi_image_free(data);
-					data = nullptr;
-					w = h = bpp = 0;
-				}
-			};
-
 			enum standard_image_resource : u8
 			{
 				fade_top = 1,
@@ -333,6 +339,7 @@ namespace rsx
 
 				u8 texture_ref = image_resource_id::none;
 				font *font_ref = nullptr;
+				void *external_data_ref = nullptr;
 
 				command_config() {}
 
@@ -576,7 +583,7 @@ namespace rsx
 						compiled_resources.draw_commands.push_back({});
 						compiled_resources.draw_commands.back().first = font? font : fontmgr::get("Arial", 12);
 						compiled_resources.draw_commands.back().first.color = fore_color;
-						compiled_resources.draw_commands.back().second = render_text(text.c_str(), (f32)(x + 15), (f32)(y + 5));
+						compiled_resources.draw_commands.back().second = render_text(text.c_str(), (f32)x, (f32)y);
 					}
 
 					is_compiled = true;
@@ -627,7 +634,7 @@ namespace rsx
 		{
 			std::vector<std::unique_ptr<overlay_element>> m_items;
 			u16 advance_pos = 0;
-			u16 padding = 0;
+			u16 pack_padding = 0;
 			u16 scroll_offset_index = 0;
 			bool auto_resize = true;
 
@@ -678,14 +685,14 @@ namespace rsx
 			{
 				if (auto_resize)
 				{
-					item->set_pos(item->x + x, h + padding + y);
-					h += item->h + padding;
+					item->set_pos(item->x + x, h + pack_padding + y);
+					h += item->h + pack_padding;
 					w = std::max(w, item->w);
 				}
 				else
 				{
-					item->set_pos(item->x + x, advance_pos + padding + y);
-					advance_pos += item->h + padding;
+					item->set_pos(item->x + x, advance_pos + pack_padding + y);
+					advance_pos += item->h + pack_padding;
 				}
 
 				if (offset < 0)
@@ -734,7 +741,7 @@ namespace rsx
 				{
 					if (index < scroll_offset_index)
 					{
-						result += m_items[index]->h + padding;
+						result += m_items[index]->h + pack_padding;
 						continue;
 					}
 				}
@@ -749,14 +756,14 @@ namespace rsx
 			{
 				if (auto_resize)
 				{
-					item->set_pos(w + padding + x, item->y + y);
-					w += item->w + padding;
+					item->set_pos(w + pack_padding + x, item->y + y);
+					w += item->w + pack_padding;
 					h = std::max(h, item->h);
 				}
 				else
 				{
-					item->set_pos(advance_pos + padding + x, item->y + y);
-					advance_pos += item->w + padding;
+					item->set_pos(advance_pos + pack_padding + x, item->y + y);
+					advance_pos += item->w + pack_padding;
 				}
 
 				if (offset < 0)
@@ -805,7 +812,7 @@ namespace rsx
 				{
 					if (index < scroll_offset_index)
 					{
-						result += m_items[index]->w + padding;
+						result += m_items[index]->w + pack_padding;
 						continue;
 					}
 				}
@@ -827,8 +834,12 @@ namespace rsx
 
 		struct image_view : public overlay_element
 		{
-			using overlay_element::overlay_element;
+		private:
 			u8 image_resource_ref = image_resource_id::none;
+			void *external_ref = nullptr;
+
+		public:
+			using overlay_element::overlay_element;
 
 			compiled_resource& get_compiled() override
 			{
@@ -837,9 +848,22 @@ namespace rsx
 					auto &result = overlay_element::get_compiled();
 					result.draw_commands.front().first = image_resource_ref;
 					result.draw_commands.front().first.color = fore_color;
+					result.draw_commands.front().first.external_data_ref = external_ref;
 				}
 
 				return compiled_resources;
+			}
+
+			void set_image_resource(u8 resource_id)
+			{
+				image_resource_ref = resource_id;
+				external_ref = nullptr;
+			}
+
+			void set_raw_image(image_info *raw_image)
+			{
+				image_resource_ref = image_resource_id::raw_image;
+				external_ref = raw_image;
 			}
 		};
 
@@ -869,8 +893,8 @@ namespace rsx
 
 							for (auto &v : cmd.second)
 							{
-								v.values[0] += text_offset;
-								v.values[1] += offset_y;
+								v.values[0] += text_offset + 15.f;
+								v.values[1] += offset_y + 5.f;
 							}
 						}
 					}
@@ -1020,10 +1044,10 @@ namespace rsx
 				m_accept_btn->set_size(120, 30);
 				m_cancel_btn->set_size(120, 30);
 
-				m_scroll_indicator_top->image_resource_ref = resource_config::standard_image_resource::fade_top;
-				m_scroll_indicator_bottom->image_resource_ref = resource_config::standard_image_resource::fade_bottom;
-				m_accept_btn->image_resource_ref = resource_config::standard_image_resource::cross;
-				m_cancel_btn->image_resource_ref = resource_config::standard_image_resource::circle;
+				m_scroll_indicator_top->set_image_resource(resource_config::standard_image_resource::fade_top);
+				m_scroll_indicator_bottom->set_image_resource(resource_config::standard_image_resource::fade_bottom);
+				m_accept_btn->set_image_resource(resource_config::standard_image_resource::cross);
+				m_cancel_btn->set_image_resource(resource_config::standard_image_resource::circle);
 
 				m_scroll_indicator_bottom->set_pos(0, height - 40);
 				m_accept_btn->set_pos(30, height + 20);
@@ -1065,7 +1089,7 @@ namespace rsx
 
 				//Calculate bounds
 				auto min_y = current_element->y - y;
-				auto max_y = current_element->y + current_element->h + padding + 2 - y;
+				auto max_y = current_element->y + current_element->h + pack_padding + 2 - y;
 
 				auto scroll_distance = get_scroll_offset_px();
 
@@ -1091,7 +1115,7 @@ namespace rsx
 					m_scroll_indicator_top->fore_color.a = 0.5f;
 
 				m_highlight_box->set_pos(current_element->x, current_element->y);
-				m_highlight_box->h = current_element->h + padding;
+				m_highlight_box->h = current_element->h + pack_padding;
 				m_highlight_box->y -= scroll_distance;
 
 				m_highlight_box->refresh();

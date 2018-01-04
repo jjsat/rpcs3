@@ -2213,13 +2213,29 @@ namespace rsx
 		}
 	}
 
+	rsx::overlays::trophy_notification* thread::shell_open_trophy_notification()
+	{
+		if (supports_native_ui)
+		{
+			auto ptr = new rsx::overlays::trophy_notification();
+			m_custom_ui.reset(ptr);
+			return ptr;
+		}
+		else
+		{
+			return nullptr;
+		}
+	}
+
 	rsx::overlays::user_interface* thread::shell_get_current_dialog()
 	{
+		//TODO: Only get dialog type interfaces
 		return m_custom_ui.get();
 	}
 
 	bool thread::shell_close_dialog()
 	{
+		//TODO: Only get dialog type interfaces
 		if (m_custom_ui)
 		{
 			m_custom_ui.reset();

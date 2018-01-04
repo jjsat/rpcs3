@@ -495,8 +495,10 @@ namespace rsx
 		void unpause();
 
 		//HLE vsh stuff
+		//TODO: Move into a separate helper
 		virtual rsx::overlays::save_dialog* shell_open_save_dialog();
 		virtual rsx::overlays::message_dialog* shell_open_message_dialog();
+		virtual rsx::overlays::trophy_notification* shell_open_trophy_notification();
 		virtual rsx::overlays::user_interface* shell_get_current_dialog();
 		virtual bool shell_close_dialog();
 		virtual void shell_do_cleanup(){}

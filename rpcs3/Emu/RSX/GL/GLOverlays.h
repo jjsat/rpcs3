@@ -325,6 +325,7 @@ namespace gl
 	{
 		u32 num_elements = 0;
 		std::vector<std::unique_ptr<gl::texture>> resources;
+		std::unordered_map<u64, std::unique_ptr<gl::texture>> temp_image_cache;
 		std::unordered_map<u64, std::unique_ptr<gl::texture>> font_cache;
 		bool is_font_draw = false;
 
@@ -371,6 +372,33 @@ namespace gl
 			};
 		}
 
+		gl::texture* load_simple_image(rsx::overlays::image_info* desc, bool temp_resource)
+		{
+			auto tex = std::make_unique<gl::texture>(gl::texture::target::texture2D);
+			tex->create();
+			tex->config()
+				.size({ desc->w, desc->h })
+				.format(gl::texture::format::rgba)
+				.type(gl::texture::type::uint_8_8_8_8)
+				.wrap(gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border)
+				.swizzle(gl::texture::channel::a, gl::texture::channel::b, gl::texture::channel::g, gl::texture::channel::r)
+				.filter(gl::min_filter::linear, gl::filter::linear)
+				.apply();
+			tex->copy_from(desc->data, gl::texture::format::rgba, gl::texture::type::uint_8_8_8_8);
+
+			if (!temp_resource)
+			{
+				resources.push_back(std::move(tex));
+			}
+			else
+			{
+				u64 key = (u64)desc;
+				temp_image_cache[key] = std::move(tex);
+			}
+
+			return resources.back().get();
+		}
+
 		void create()
 		{
 			overlay_pass::create();
@@ -380,18 +408,7 @@ namespace gl
 
 			for (const auto &res : configuration.texture_raw_data)
 			{
-				auto tex = std::make_unique<gl::texture>(gl::texture::target::texture2D);
-				tex->create();
-				tex->config()
-					.size({ res->w, res->h })
-					.format(gl::texture::format::rgba)
-					.type(gl::texture::type::uint_8_8_8_8)
-					.wrap(gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border, gl::texture::wrap::clamp_to_border)
-					.swizzle(gl::texture::channel::a, gl::texture::channel::b, gl::texture::channel::g, gl::texture::channel::r)
-					.filter(gl::min_filter::linear, gl::filter::linear)
-					.apply();
-				tex->copy_from(res->data, gl::texture::format::rgba, gl::texture::type::uint_8_8_8_8);
-				resources.push_back(std::move(tex));
+				load_simple_image(res.get(), false);
 			}
 
 			configuration.free_resources();
@@ -399,9 +416,15 @@ namespace gl
 
 		void destroy()
 		{
+			temp_image_cache.clear();
 			resources.clear();
 			font_cache.clear();
 			overlay_pass::destroy();
+		}
+
+		void remove_temp_resources()
+		{
+			temp_image_cache.clear();
 		}
 
 		gl::texture* find_font(rsx::overlays::font *font)
@@ -429,6 +452,20 @@ namespace gl
 			font_cache[key] = std::move(tex);
 
 			return result;
+		}
+
+		gl::texture* find_temp_image(rsx::overlays::image_info *desc)
+		{
+			auto key = (u64)desc;
+			auto cached = temp_image_cache.find(key);
+			if (cached != temp_image_cache.end())
+			{
+				return cached->second.get();
+			}
+			else
+			{
+				return load_simple_image(desc, true);
+			}
 		}
 
 		void emit_geometry() override
@@ -480,16 +517,27 @@ namespace gl
 				case rsx::overlays::image_resource_id::backbuffer:
 					//TODO
 				case rsx::overlays::image_resource_id::none:
+				{
 					texture_exists = GL_FALSE;
 					glBindTexture(GL_TEXTURE_2D, GL_NONE);
 					break;
+				}
+				case rsx::overlays::image_resource_id::raw_image:
+				{
+					glBindTexture(GL_TEXTURE_2D, find_temp_image((rsx::overlays::image_info*)cmd.first.external_data_ref)->id());
+					break;
+				}
 				case rsx::overlays::image_resource_id::font_file:
+				{
 					is_font_draw = true;
 					glBindTexture(GL_TEXTURE_2D, find_font(cmd.first.font_ref)->id());
 					break;
+				}
 				default:
+				{
 					glBindTexture(GL_TEXTURE_2D, resources[cmd.first.texture_ref - 1]->id());
 					break;
+				}
 				}
 
 				program_handle.uniforms["color"] = cmd.first.color;
@@ -497,6 +545,8 @@ namespace gl
 				program_handle.uniforms["pulse_glow"] = (s32)cmd.first.pulse_glow;
 				overlay_pass::run(w, h, target, false, true);
 			}
+
+			ui.update();
 		}
 	};
 }

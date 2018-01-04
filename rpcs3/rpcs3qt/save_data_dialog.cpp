@@ -11,7 +11,7 @@ s32 save_data_dialog::ShowSaveDataList(std::vector<SaveDataEntry>& save_entries,
 	{
 		if (auto native_dlg = rsxthr->shell_open_save_dialog())
 		{
-			auto result = native_dlg->run(save_entries, op, listSet);
+			auto result = native_dlg->show(save_entries, op, listSet);
 			if (result != rsx::overlays::user_interface::selection_code::error)
 				return result;
 		}

@@ -1445,3 +1445,8 @@ void GLGSRender::get_occlusion_query_result(rsx::occlusion_query_info* query)
 
 	query->result += result;
 }
+
+void GLGSRender::shell_do_cleanup()
+{
+	m_ui_renderer.remove_temp_resources();
+}

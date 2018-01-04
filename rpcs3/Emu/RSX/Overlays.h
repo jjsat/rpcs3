@@ -9,6 +9,9 @@
 #include "Emu/Cell/ErrorCodes.h"
 #include "Emu/Cell/Modules/cellSaveData.h"
 #include "Emu/Cell/Modules/cellMsgDialog.h"
+#include "Emu/Cell/Modules/sceNpTrophy.h"
+
+extern u64 get_system_time();
 
 // Definition of user interface implementations
 namespace rsx
@@ -47,6 +50,8 @@ namespace rsx
 
 			void close();
 			void refresh();
+
+			virtual void update(){}
 
 			virtual void on_button_pressed(pad_button button_press)
 			{
@@ -176,6 +181,7 @@ namespace rsx
 
 		struct save_dialog : public user_interface
 		{
+		private:
 			struct save_dialog_entry : horizontal_layout
 			{
 				save_dialog_entry(const char* text1, const char* text2, u8 image_resource_id)
@@ -183,7 +189,7 @@ namespace rsx
 					std::unique_ptr<overlay_element> image = std::make_unique<image_view>();
 					image->set_size(100, 100);
 					image->set_padding(20);
-					static_cast<image_view*>(image.get())->image_resource_ref = image_resource_id;
+					static_cast<image_view*>(image.get())->set_image_resource(image_resource_id);
 
 					std::unique_ptr<overlay_element> text_stack = std::make_unique<vertical_layout>();
 					std::unique_ptr<overlay_element> padding = std::make_unique<spacer>();
@@ -205,12 +211,13 @@ namespace rsx
 					header_text->back_color.a = 0.f;
 					subtext->back_color.a = 0.f;
 
-					static_cast<vertical_layout*>(text_stack.get())->padding = 5;
+					static_cast<vertical_layout*>(text_stack.get())->pack_padding = 5;
 					static_cast<vertical_layout*>(text_stack.get())->add_element(padding);
 					static_cast<vertical_layout*>(text_stack.get())->add_element(header_text);
 					static_cast<vertical_layout*>(text_stack.get())->add_element(subtext);
 
 					//Pack
+					this->pack_padding = 15;
 					add_element(image);
 					add_element(text_stack);
 				}
@@ -223,6 +230,7 @@ namespace rsx
 
 			s32 return_code = selection_code::canceled;
 
+		public:
 			save_dialog()
 			{
 				m_dim_background = std::make_unique<overlay_element>();
@@ -276,7 +284,7 @@ namespace rsx
 				return result;
 			}
 
-			s32 run(std::vector<SaveDataEntry>& save_entries, u32 op, vm::ptr<CellSaveDataListSet> listSet)
+			s32 show(std::vector<SaveDataEntry>& save_entries, u32 op, vm::ptr<CellSaveDataListSet> listSet)
 			{
 				auto num_actual_saves = save_entries.size();
 				for (auto &entry : save_entries)
@@ -312,6 +320,7 @@ namespace rsx
 
 		struct message_dialog : public user_interface
 		{
+		private:
 			label text_display;
 			image_button btn_ok;
 			image_button btn_cancel;
@@ -324,6 +333,7 @@ namespace rsx
 			bool interactive = false;
 			bool ok_only = false;
 
+		public:
 			message_dialog()
 			{
 				background.set_size(1280, 720);
@@ -341,16 +351,16 @@ namespace rsx
 				progress_1.set_size(1200, 4);
 				progress_2.set_size(1200, 4);
 
-				btn_ok.image_resource_ref = resource_config::standard_image_resource::cross;
+				btn_ok.set_image_resource(resource_config::standard_image_resource::cross);
 				btn_ok.set_text("Yes");
 				btn_ok.set_size(120, 30);
-				btn_ok.set_pos(560, 420);
+				btn_ok.set_pos(545, 420);
 				btn_ok.set_font("Arial", 16);
 
-				btn_cancel.image_resource_ref = resource_config::standard_image_resource::circle;
+				btn_cancel.set_image_resource(resource_config::standard_image_resource::circle);
 				btn_cancel.set_text("No");
 				btn_cancel.set_size(120, 30);
-				btn_cancel.set_pos(700, 420);
+				btn_cancel.set_pos(685, 420);
 				btn_cancel.set_font("Arial", 16);
 			}
 
@@ -440,7 +450,7 @@ namespace rsx
 					interactive = false;
 					break;
 				case CELL_MSGDIALOG_TYPE_BUTTON_TYPE_OK:
-					btn_ok.set_pos(600, 420);
+					btn_ok.set_pos(585, 420);
 					btn_ok.set_text("OK");
 					interactive = true;
 					ok_only = true;
@@ -497,6 +507,77 @@ namespace rsx
 				else
 					progress_2.set_value(0.f);
 
+				return CELL_OK;
+			}
+		};
+
+		struct trophy_notification : public user_interface
+		{
+		private:
+			overlay_element frame;
+			image_view image;
+			label text_view;
+
+			u64 creation_time = 0;
+			std::unique_ptr<image_info> icon_info;
+
+		public:
+			trophy_notification()
+			{
+				frame.set_pos(0, 0);
+				frame.set_size(250, 80);
+				frame.back_color.a = 0.85f;
+
+				image.set_pos(8, 8);
+				image.set_size(64, 64);
+				image.back_color.a = 0.f;
+
+				text_view.set_pos(72, 0);
+				text_view.set_padding(0.f, 0.f, 25.f, 0.f);
+				text_view.set_font("Arial", 8);
+				text_view.align_text(overlay_element::text_align::center);
+				text_view.back_color.a = 0.f;
+			}
+
+			void update() override
+			{
+				u64 t = get_system_time();
+				if (((t - creation_time) / 1000) > 7500)
+					close();
+			}
+
+			compiled_resource get_compiled() override
+			{
+				auto result = frame.get_compiled();
+				result.add(image.get_compiled());
+				result.add(text_view.get_compiled());
+
+				return result;
+			}
+
+			s32 show(const SceNpTrophyDetails& trophy, const std::vector<uchar>& trophy_icon_buffer)
+			{
+				if (trophy_icon_buffer.size())
+				{
+					icon_info = std::make_unique<image_info>(trophy_icon_buffer);
+					image.set_raw_image(icon_info.get());
+				}
+
+				std::string trophy_message;
+				switch (trophy.trophyGrade)
+				{
+				case SCE_NP_TROPHY_GRADE_BRONZE: trophy_message = "bronze"; break;
+				case SCE_NP_TROPHY_GRADE_SILVER: trophy_message = "silver"; break;
+				case SCE_NP_TROPHY_GRADE_GOLD: trophy_message = "gold"; break;
+				case SCE_NP_TROPHY_GRADE_PLATINUM: trophy_message = "platinum"; break;
+				default: break;
+				}
+
+				trophy_message = "You have earned the " + trophy_message + " trophy\n" + trophy.name;
+				text_view.set_text(trophy_message);
+				text_view.auto_resize();
+
+				creation_time = get_system_time();
 				return CELL_OK;
 			}
 		};

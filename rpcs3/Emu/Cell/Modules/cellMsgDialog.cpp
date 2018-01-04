@@ -61,13 +61,6 @@ s32 cellMsgDialogOpen2(u32 type, vm::cptr<char> msgString, vm::ptr<CellMsgDialog
 	default: return CELL_MSGDIALOG_ERROR_PARAM;
 	}
 
-	const auto dlg = fxm::import<MsgDialogBase>(Emu.GetCallbacks().get_msg_dialog);
-
-	if (!dlg)
-	{
-		return CELL_SYSUTIL_ERROR_BUSY;
-	}
-
 	if (_type.se_mute_on)
 	{
 		// TODO
@@ -80,6 +73,39 @@ s32 cellMsgDialogOpen2(u32 type, vm::cptr<char> msgString, vm::ptr<CellMsgDialog
 	else
 	{
 		cellSysutil.error(msgString.get_ptr());
+	}
+
+	if (auto rsxthr = fxm::get<GSRender>())
+	{
+		if (auto dlg = rsxthr->shell_open_message_dialog())
+		{
+			auto status = dlg->show(msgString.get_ptr(), _type.button_type.unshifted(), _type.progress_bar_count);
+			if (status >= 0)
+			{
+				if (callback)
+				{
+					sysutil_register_cb([=](ppu_thread& ppu) -> s32
+					{
+						callback(ppu, status, userData);
+						return CELL_OK;
+					});
+				}
+
+				return CELL_OK;
+			}
+			else
+			{
+				if (Emu.IsStopped())
+					return CELL_OK;
+			}
+		}
+	}
+
+	const auto dlg = fxm::import<MsgDialogBase>(Emu.GetCallbacks().get_msg_dialog);
+
+	if (!dlg)
+	{
+		return CELL_SYSUTIL_ERROR_BUSY;
 	}
 
 	dlg->type = _type;
@@ -105,44 +131,16 @@ s32 cellMsgDialogOpen2(u32 type, vm::cptr<char> msgString, vm::ptr<CellMsgDialog
 
 	atomic_t<bool> result(false);
 
-	if (auto rsxthr = fxm::get<GSRender>())
+	// Run asynchronously in GUI thread
+	Emu.CallAfter([&]()
 	{
-		if (auto dlg = rsxthr->shell_open_message_dialog())
-		{
-			auto status = dlg->show(msgString.get_ptr(), _type.button_type.unshifted(), _type.progress_bar_count);
-			if (status >= 0)
-			{
-				if (callback)
-				{
-					sysutil_register_cb([=](ppu_thread& ppu) -> s32
-					{
-						callback(ppu, status, userData);
-						return CELL_OK;
-					});
-				}
-				result = true;
-			}
-			else
-			{
-				if (Emu.IsStopped())
-					return CELL_OK;
-			}
-		}
-	}
+		dlg->Create(msgString.get_ptr());
+		result = true;
+	});
 
-	if (!result)
+	while (!result)
 	{
-		// Run asynchronously in GUI thread
-		Emu.CallAfter([&]()
-		{
-			dlg->Create(msgString.get_ptr());
-			result = true;
-		});
-
-		while (!result)
-		{
-			thread_ctrl::wait_for(1000);
-		}
+		thread_ctrl::wait_for(1000);
 	}
 
 	return CELL_OK;

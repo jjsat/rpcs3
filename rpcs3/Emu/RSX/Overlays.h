@@ -450,7 +450,7 @@ namespace rsx
 					interactive = false;
 					break;
 				case CELL_MSGDIALOG_TYPE_BUTTON_TYPE_OK:
-					btn_ok.set_pos(585, 420);
+					btn_ok.set_pos(600, 420);
 					btn_ok.set_text("OK");
 					interactive = true;
 					ok_only = true;

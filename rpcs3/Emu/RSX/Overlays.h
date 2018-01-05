@@ -532,8 +532,8 @@ namespace rsx
 				image.set_size(64, 64);
 				image.back_color.a = 0.f;
 
-				text_view.set_pos(90, 0);
-				text_view.set_padding(0.f, 0.f, 25.f, 0.f);
+				text_view.set_pos(85, 0);
+				text_view.set_padding(0.f, 0.f, 30.f, 0.f);
 				text_view.set_font("Arial", 8);
 				text_view.align_text(overlay_element::text_align::center);
 				text_view.back_color.a = 0.f;
@@ -577,6 +577,10 @@ namespace rsx
 				text_view.set_text(trophy_message);
 				text_view.auto_resize();
 
+				//Resize background to cover the text
+				u16 margin_sz = text_view.x - image.w - image.x;
+				frame.w = text_view.x + text_view.w + margin_sz;
+
 				creation_time = get_system_time();
 				return CELL_OK;
 			}
@@ -599,13 +603,13 @@ namespace rsx
 				m_text.set_text("Compiling shaders");
 				m_text.pulse_effect_enabled = true;
 				m_text.auto_resize();
-				m_text.set_pos(0, 700);
+				m_text.set_pos(20, 700);
 
 				for (int n = 0; n < 3; ++n)
 				{
 					dots[n].set_size(2, 2);
 					dots[n].back_color = color4f(1.f, 1.f, 1.f, 1.f);
-					dots[n].set_pos( m_text.w + 5 + (6 * n), 710);
+					dots[n].set_pos( m_text.w + 25 + (6 * n), 710);
 				}
 
 				creation_time = get_system_time();

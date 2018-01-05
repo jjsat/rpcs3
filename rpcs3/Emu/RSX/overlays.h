@@ -163,7 +163,7 @@ namespace rsx
 			{
 				m_display.w = 150;
 				m_display.h = 30;
-				m_display.font = fontmgr::get("Arial", 16);
+				m_display.set_font("Arial", 16);
 				m_display.set_pos(1100, 20);
 			}
 
@@ -199,10 +199,10 @@ namespace rsx
 					padding->set_size(1, 10);
 					header_text->set_size(200, 40);
 					header_text->text = text1;
-					header_text->font = fontmgr::get("Arial", 16);
+					header_text->set_font("Arial", 16);
 					subtext->set_size(200, 40);
 					subtext->text = text2;
-					subtext->font = fontmgr::get("Arial", 14);
+					subtext->set_font("Arial", 14);
 
 					//Auto-resize save details label
 					static_cast<label*>(subtext.get())->auto_resize();
@@ -242,11 +242,11 @@ namespace rsx
 
 				m_list->set_pos(20, 85);
 
-				m_description->font = fontmgr::get("Arial", 20);
+				m_description->set_font("Arial", 20);
 				m_description->set_pos(20, 50);
 				m_description->text = "Save Dialog";
 
-				m_time_thingy->font = fontmgr::get("Arial", 14);
+				m_time_thingy->set_font("Arial", 14);
 				m_time_thingy->set_pos(1000, 40);
 				m_time_thingy->text = "Sat, Jan 01, 00: 00: 00 GMT";
 

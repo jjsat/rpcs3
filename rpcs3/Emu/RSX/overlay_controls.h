@@ -116,9 +116,9 @@ namespace rsx
 				std::string fallback_font = "C:/Windows/Fonts/Arial.ttf";
 #else
 				std::string font_dir = "~/.fonts/";
-				std::string fallback_font = "/usr/share/fonts/dejavu/DejaVuSans.ttf";
+				std::string fallback_font = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
 #endif
-				std::string requested_file = std::string() + ttf_name + ".ttf";
+				std::string requested_file = font_dir + ttf_name + ".ttf";
 				std::string file_path = requested_file;
 
 				if (!fs::is_file(requested_file))
@@ -342,7 +342,34 @@ namespace rsx
 			{
 				for (const auto &res : texture_resource_files)
 				{
-					auto info = std::make_unique<image_info>((fs::get_config_dir() + "/Icons/ui/" + res).c_str());
+					//First check the global config dir
+					auto info = std::make_unique<image_info>((fs::get_config_dir() + "Icons/ui/" + res).c_str());
+
+					if (info->data == nullptr)
+					{
+						//Resource was not found in config dir, try and grab from relative path (linux)
+						info = std::make_unique<image_info>(("Icons/ui/" + res).c_str());
+
+						if (info->data != nullptr)
+						{
+							//Install the image to config dir
+							auto dst_dir = fs::get_config_dir() + "Icons/ui/";
+							auto src = "Icons/ui/" + res;
+							auto dst = dst_dir + res;
+
+							if (!fs::is_dir(dst_dir))
+							{
+								auto root_folder = fs::get_config_dir() + "Icons/";
+								if (!fs::is_dir(root_folder))
+									fs::create_dir(root_folder);
+
+								fs::create_dir(dst_dir);
+							}
+
+							fs::copy_file(src, dst, true);
+						}
+					}
+
 					texture_raw_data.push_back(std::move(info));
 				}
 			}
@@ -397,7 +424,10 @@ namespace rsx
 				for (size_t n = old_size; n < draw_commands.size(); ++n)
 				{
 					for (auto &v : draw_commands[n].second)
-						v += vertex(x_offset, y_offset, 0.f, 0.f);
+					{
+						vertex offsets = { x_offset, y_offset, 0.f, 0.f };
+						v += offsets;
+					}
 				}
 			}
 		};
@@ -416,7 +446,7 @@ namespace rsx
 			u16 h = 0;
 
 			std::string text;
-			font* font = nullptr;
+			font* font_ref = nullptr;
 			text_align alignment = left;
 
 			color4f back_color = { 0.f, 0.f, 0.f, 1.f };
@@ -508,7 +538,7 @@ namespace rsx
 
 			virtual void set_font(const char* font_name, u16 font_size)
 			{
-				font = fontmgr::get(font_name, font_size);
+				font_ref = fontmgr::get(font_name, font_size);
 				is_compiled = false;
 			}
 
@@ -520,7 +550,7 @@ namespace rsx
 
 			virtual std::vector<vertex> render_text(const char *string, f32 x, f32 y)
 			{
-				auto renderer = font;
+				auto renderer = font_ref;
 				if (!renderer) renderer = fontmgr::get("Arial", 12);
 
 				f32 text_extents_w = 0.f;
@@ -604,7 +634,7 @@ namespace rsx
 					if (!text.empty())
 					{
 						compiled_resources.draw_commands.push_back({});
-						compiled_resources.draw_commands.back().first = font? font : fontmgr::get("Arial", 12);
+						compiled_resources.draw_commands.back().first = font_ref? font_ref : fontmgr::get("Arial", 12);
 						compiled_resources.draw_commands.back().first.color = fore_color;
 						compiled_resources.draw_commands.back().second = render_text(text.c_str(), (f32)x, (f32)y);
 					}
@@ -623,7 +653,7 @@ namespace rsx
 					return;
 				}
 
-				auto renderer = font;
+				auto renderer = font_ref;
 				if (!renderer) renderer = fontmgr::get("Arial", 12);
 
 				f32 w = 0.f;
@@ -915,7 +945,7 @@ namespace rsx
 						if (cmd.first.texture_ref == image_resource_id::font_file)
 						{
 							//Text, translate geometry to the right
-							const f32 text_height = font ? font->size_px : 16.f;
+							const f32 text_height = font_ref ? font_ref->size_px : 16.f;
 							const f32 offset_y = (h > text_height) ? (f32)(h - text_height) : ((f32)h - text_height);
 
 							for (auto &v : cmd.second)
@@ -1084,8 +1114,8 @@ namespace rsx
 				m_cancel_btn->text = "Cancel";
 
 				auto fnt = fontmgr::get("Arial", 16);
-				m_accept_btn->font = fnt;
-				m_cancel_btn->font = fnt;
+				m_accept_btn->font_ref = fnt;
+				m_cancel_btn->font_ref = fnt;
 
 				auto_resize = false;
 				back_color = { 0.15f, 0.15f, 0.15f, 0.8f };

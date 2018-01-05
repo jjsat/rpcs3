@@ -55,7 +55,8 @@ namespace gl
 				m_vao.bind();
 
 				m_vao.array_buffer = m_vertex_data_buffer;
-				m_vao[0] = buffer_pointer(&m_vao);
+				auto ptr = buffer_pointer(&m_vao);
+				m_vao[0] = ptr;
 
 				glBindVertexArray(old_vao);
 

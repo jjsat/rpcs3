@@ -966,7 +966,21 @@ void GLGSRender::load_program(u32 vertex_base, u32 vertex_count)
 	m_program->use();
 
 	if (m_prog_buffer.check_cache_missed())
+	{
 		m_shaders_cache->store(pipeline_properties, vertex_program, fragment_program);
+
+		//Notify the user with HUD notification
+		if (!m_custom_ui)
+		{
+			//Create notification but do not draw it at this time. No need to spam flip requests
+			m_custom_ui = std::make_unique<rsx::overlays::shader_compile_notification>();
+		}
+		else if (auto casted = dynamic_cast<rsx::overlays::shader_compile_notification*>(m_custom_ui.get()))
+		{
+			//Probe the notification
+			casted->touch();
+		}
+	}
 
 	u8 *buf;
 	u32 vertex_state_offset;

@@ -581,5 +581,93 @@ namespace rsx
 				return CELL_OK;
 			}
 		};
+
+		struct shader_compile_notification : user_interface
+		{
+			label m_text;
+
+			overlay_element dots[3];
+			u8 current_dot = 255;
+
+			u64 creation_time = 0;
+			u64 expire_time = 0; //Time to end the prompt
+			u64 urgency_ctr = 0; //How critical it is to show to the user
+
+			shader_compile_notification()
+			{
+				m_text.set_font("Arial", 16);
+				m_text.set_text("Compiling shaders");
+				m_text.pulse_effect_enabled = true;
+				m_text.auto_resize();
+				m_text.set_pos(0, 700);
+
+				for (int n = 0; n < 3; ++n)
+				{
+					dots[n].set_size(2, 2);
+					dots[n].back_color = color4f(1.f, 1.f, 1.f, 1.f);
+					dots[n].set_pos( m_text.w + 5 + (6 * n), 710);
+				}
+
+				creation_time = get_system_time();
+				expire_time = creation_time + 1000000;
+			}
+
+			void update_animation(u64 t)
+			{
+				//Update rate is twice per second
+				auto elapsed = t - creation_time;
+				elapsed /= 500000;
+
+				auto old_dot = current_dot;
+				current_dot = elapsed % 3;
+
+				if (old_dot != current_dot)
+				{
+					if (old_dot != 255)
+					{
+						dots[old_dot].set_size(2, 2);
+						dots[old_dot].translate(0, 1);
+					}
+
+					dots[current_dot].translate(0, -1);
+					dots[current_dot].set_size(3, 3);
+				}
+			}
+
+			//Extends visible time by half a second. Also updates the screen
+			void touch()
+			{
+				if (urgency_ctr == 0 || urgency_ctr > 8)
+				{
+					refresh();
+					urgency_ctr = 0;
+				}
+
+				expire_time = get_system_time() + 500000;
+				urgency_ctr++;
+			}
+
+			void update() override
+			{
+				auto current_time = get_system_time();
+				if (current_time > expire_time)
+					close();
+
+				update_animation(current_time);
+
+				//Usually this method is called during a draw-to-screen operation. Reset urgency ctr
+				urgency_ctr = 1;
+			}
+
+			compiled_resource get_compiled() override
+			{
+				auto compiled = m_text.get_compiled();
+				compiled.add(dots[0].get_compiled());
+				compiled.add(dots[1].get_compiled());
+				compiled.add(dots[2].get_compiled());
+
+				return compiled;
+			}
+		};
 	}
 }

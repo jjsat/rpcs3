@@ -2974,7 +2974,7 @@ void VKGSRender::flip(int buffer)
 	VkImage target_image = m_swap_chain->get_swap_chain_image(m_current_frame->present_image);
 	if (image_to_flip)
 	{
-		vk::copy_scaled_image(*m_current_command_buffer, image_to_flip->value, target_image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		vk::copy_scaled_image(*m_current_command_buffer, image_to_flip->value, target_image, image_to_flip->current_layout, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 			0, 0, image_to_flip->width(), image_to_flip->height(), aspect_ratio.x, aspect_ratio.y, aspect_ratio.width, aspect_ratio.height, 1, VK_IMAGE_ASPECT_COLOR_BIT, false);
 	}
 	else

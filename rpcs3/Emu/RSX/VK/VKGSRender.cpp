@@ -682,7 +682,7 @@ VKGSRender::VKGSRender() : GSRender()
 	m_ui_renderer->create(*m_current_command_buffer, m_memory_type_mapping, m_texture_upload_buffer_ring_info);
 
 	supports_multidraw = !g_cfg.video.strict_rendering_mode;
-	supports_native_ui = true;
+	supports_native_ui = (bool)g_cfg.misc.use_native_interface;
 }
 
 VKGSRender::~VKGSRender()

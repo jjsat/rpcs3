@@ -111,14 +111,31 @@ namespace rsx
 			{
 				//Init glyph
 				std::vector<u8> bytes;
-				fs::file f(std::string("C:/Windows/Fonts/") + ttf_name + ".ttf");
+#ifdef _WIN32
+				std::string font_dir = "C:/Windows/Fonts/";
+				std::string fallback_font = "C:/Windows/Fonts/Arial.ttf";
+#else
+				std::string font_dir = "~/.fonts/";
+				std::string fallback_font = "/usr/share/fonts/dejavu/DejaVuSans.ttf";
+#endif
+				std::string requested_file = std::string() + ttf_name + ".ttf";
+				std::string file_path = requested_file;
 
-				if (!f.size())
+				if (!fs::is_file(requested_file))
 				{
-					LOG_ERROR(RSX, "Failed to initialize font '%s.ttf'", ttf_name);
-					return;
+					if (fs::is_file(fallback_font))
+					{
+						//TODO: Multiple fallbacks
+						file_path = fallback_font;
+					}
+					else
+					{
+						LOG_ERROR(RSX, "Failed to initialize font '%s.ttf'", ttf_name);
+						return;
+					}
 				}
 
+				fs::file f(file_path);
 				f.read(bytes, f.size());
 
 				glyph_data.resize(width * height);
@@ -266,6 +283,12 @@ namespace rsx
 
 			image_info(const char* filename)
 			{
+				if (!fs::is_file(filename))
+				{
+					LOG_ERROR(RSX, "Image resource file `%s' not found", filename);
+					return;
+				}
+
 				std::vector<u8> bytes;
 				fs::file f(filename);
 				f.read(bytes, f.size());

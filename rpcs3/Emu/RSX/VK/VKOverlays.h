@@ -521,7 +521,11 @@ namespace vk
 				VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 				0);
 
-			std::memcpy(addr, pixel_src, data_size);
+			if (pixel_src && data_size)
+				std::memcpy(addr, pixel_src, data_size);
+			else if (data_size)
+				std::memset(addr, 0, data_size);
+
 			upload_heap.unmap();
 
 			VkBufferImageCopy region;

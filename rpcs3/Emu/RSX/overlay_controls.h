@@ -75,7 +75,7 @@ namespace rsx
 				values[3] = w;
 			}
 
-			void operator += (vertex& other)
+			void operator += (const vertex& other)
 			{
 				values[0] += other.values[0];
 				values[1] += other.values[1];
@@ -83,7 +83,7 @@ namespace rsx
 				values[3] += other.values[3];
 			}
 
-			void operator -= (vertex& other)
+			void operator -= (const vertex& other)
 			{
 				values[0] -= other.values[0];
 				values[1] -= other.values[1];
@@ -425,8 +425,7 @@ namespace rsx
 				{
 					for (auto &v : draw_commands[n].second)
 					{
-						vertex offsets = { x_offset, y_offset, 0.f, 0.f };
-						v += offsets;
+						v += vertex(x_offset, y_offset, 0.f, 0.f);
 					}
 				}
 			}
@@ -659,6 +658,8 @@ namespace rsx
 				f32 w = 0.f;
 				f32 unused = 0.f;
 				f32 max_w = 0.f;
+				height = renderer->size_px;
+
 				for (auto c : text)
 				{
 					if (c == '\n')

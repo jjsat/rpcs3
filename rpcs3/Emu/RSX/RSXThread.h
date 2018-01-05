@@ -233,6 +233,7 @@ namespace rsx
 		bool framebuffer_status_valid = false;
 
 		std::unique_ptr<rsx::overlays::user_interface> m_custom_ui;
+		std::unique_ptr<rsx::overlays::user_interface> m_invalidated_ui;
 
 	public:
 		RsxDmaControl* ctrl = nullptr;

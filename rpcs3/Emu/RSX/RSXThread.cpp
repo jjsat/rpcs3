@@ -2238,7 +2238,7 @@ namespace rsx
 		//TODO: Only get dialog type interfaces
 		if (m_custom_ui)
 		{
-			m_custom_ui.reset();
+			m_invalidated_ui = std::move(m_custom_ui);
 			shell_do_cleanup();
 			return true;
 		}

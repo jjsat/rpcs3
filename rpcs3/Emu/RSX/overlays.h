@@ -601,9 +601,10 @@ namespace rsx
 			{
 				m_text.set_font("Arial", 16);
 				m_text.set_text("Compiling shaders");
-				m_text.pulse_effect_enabled = true;
 				m_text.auto_resize();
 				m_text.set_pos(20, 700);
+
+				m_text.back_color.a = 0.f;
 
 				for (int n = 0; n < 3; ++n)
 				{

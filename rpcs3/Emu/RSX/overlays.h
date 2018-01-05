@@ -340,7 +340,7 @@ namespace rsx
 				background.back_color.a = 0.85f;
 
 				text_display.set_size(1280, 40);
-				text_display.set_pos(0, 350);
+				text_display.set_pos(0, 375);
 				text_display.set_font("Arial", 16);
 				text_display.align_text(overlay_element::text_align::center);
 

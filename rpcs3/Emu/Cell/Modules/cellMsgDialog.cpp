@@ -79,8 +79,7 @@ s32 cellMsgDialogOpen2(u32 type, vm::cptr<char> msgString, vm::ptr<CellMsgDialog
 	{
 		if (auto dlg = rsxthr->shell_open_message_dialog())
 		{
-			auto status = dlg->show(msgString.get_ptr(), _type.button_type.unshifted(), _type.progress_bar_count);
-			if (status >= 0)
+			dlg->show(msgString.get_ptr(), _type, [callback, userData](s32 status)
 			{
 				if (callback)
 				{
@@ -90,14 +89,9 @@ s32 cellMsgDialogOpen2(u32 type, vm::cptr<char> msgString, vm::ptr<CellMsgDialog
 						return CELL_OK;
 					});
 				}
+			});
 
-				return CELL_OK;
-			}
-			else
-			{
-				if (Emu.IsStopped())
-					return CELL_OK;
-			}
+			return CELL_OK;
 		}
 	}
 

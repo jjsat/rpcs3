@@ -12,6 +12,9 @@ namespace rsx
 			exit = true;
 			if (auto rsxthr = fxm::get<GSRender>())
 				rsxthr->shell_close_dialog();
+
+			if (on_close)
+				on_close(return_code);
 		}
 
 		void user_interface::refresh()

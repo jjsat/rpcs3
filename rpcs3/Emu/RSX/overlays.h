@@ -1,6 +1,7 @@
 #pragma once
 #include "overlay_controls.h"
 
+#include "../../Utilities/Thread.h"
 #include "../Io/PadHandler.h"
 #include "Emu/Memory/vm.h"
 #include "Emu/IdManager.h"
@@ -45,6 +46,9 @@ namespace rsx
 
 			u64  input_timestamp = 0;
 			bool exit = false;
+
+			s32 return_code = CELL_OK;
+			std::function<void(s32 status)> on_close;
 
 			virtual compiled_resource get_compiled() = 0;
 
@@ -329,9 +333,9 @@ namespace rsx
 			progress_bar progress_1, progress_2;
 			u8 num_progress_bars = 0;
 
-			s32 return_code = CELL_MSGDIALOG_BUTTON_ESCAPE;
 			bool interactive = false;
 			bool ok_only = false;
+			bool cancel_only = false;
 
 		public:
 			message_dialog()
@@ -348,8 +352,10 @@ namespace rsx
 				bottom_bar.set_size(1200, 2);
 				bottom_bar.set_pos(40, 400);
 
-				progress_1.set_size(1200, 4);
-				progress_2.set_size(1200, 4);
+				progress_1.set_size(800, 4);
+				progress_2.set_size(800, 4);
+				progress_1.back_color = color4f(0.25f, 0.f, 0.f, 0.85f);
+				progress_2.back_color = color4f(0.25f, 0.f, 0.f, 0.85f);
 
 				btn_ok.set_image_resource(resource_config::standard_image_resource::cross);
 				btn_ok.set_text("Yes");
@@ -362,6 +368,8 @@ namespace rsx
 				btn_cancel.set_size(120, 30);
 				btn_cancel.set_pos(685, 420);
 				btn_cancel.set_font("Arial", 16);
+
+				return_code = CELL_MSGDIALOG_BUTTON_ESCAPE;
 			}
 
 			compiled_resource get_compiled() override
@@ -379,7 +387,9 @@ namespace rsx
 				if (interactive)
 				{
 					result.add(bottom_bar.get_compiled());
-					result.add(btn_ok.get_compiled());
+
+					if (!cancel_only)
+						result.add(btn_ok.get_compiled());
 
 					if (!ok_only)
 						result.add(btn_cancel.get_compiled());
@@ -395,19 +405,36 @@ namespace rsx
 				case pad_button::cross:
 				{
 					if (ok_only)
+					{
 						return_code = CELL_MSGDIALOG_BUTTON_OK;
+					}
+					else if (cancel_only)
+					{
+						//Do not accept for cancel-only dialogs
+						return;
+					}
 					else
+					{
 						return_code = CELL_MSGDIALOG_BUTTON_YES;
+					}
 
 					break;
 				}
 				case pad_button::circle:
 				{
 					if (ok_only)
-						//TODO: Support cancel operation
+					{
+						//Ignore cancel operation for Ok-only
 						return;
+					}
+					else if (cancel_only)
+					{
+						return_code = CELL_MSGDIALOG_BUTTON_ESCAPE;
+					}
 					else
+					{
 						return_code = CELL_MSGDIALOG_BUTTON_NO;
+					}
 
 					break;
 				}
@@ -418,17 +445,17 @@ namespace rsx
 				close();
 			}
 
-			s32 show(std::string text, u32 type, u8 num_progress)
+			s32 show(std::string text, const MsgDialogType &type, std::function<void(s32 status)> on_close)
 			{
-				num_progress_bars = num_progress;
+				num_progress_bars = type.progress_bar_count;
 				if (num_progress_bars)
 				{
 					u16 offset = 25;
-					progress_1.set_pos(40, 400);
+					progress_1.set_pos(240, 400);
 
 					if (num_progress_bars > 1)
 					{
-						progress_2.set_pos(40, 425);
+						progress_2.set_pos(240, 425);
 						offset = 50;
 					}
 
@@ -444,10 +471,16 @@ namespace rsx
 				text_display.measure_text(text_w, text_h);
 				text_display.translate(0, -(text_h - 16));
 
-				switch (type)
+				switch (type.button_type.unshifted())
 				{
 				case CELL_MSGDIALOG_TYPE_BUTTON_TYPE_NONE:
-					interactive = false;
+					interactive = !type.disable_cancel;
+					if (interactive)
+					{
+						btn_cancel.set_pos(585, 420);
+						btn_cancel.set_text("Back");
+						cancel_only = true;
+					}
 					break;
 				case CELL_MSGDIALOG_TYPE_BUTTON_TYPE_OK:
 					btn_ok.set_pos(600, 420);
@@ -460,12 +493,16 @@ namespace rsx
 					break;
 				}
 
+				this->on_close = on_close;
 				if (interactive)
 				{
-					if (auto error = run_input_loop())
-						return error;
-
-					return return_code;
+					thread_ctrl::spawn("dialog input thread", [&]
+					{
+						if (auto error = run_input_loop())
+						{
+							LOG_ERROR(RSX, "Dialog input loop exited with error code=%d", error);
+						}
+					});
 				}
 
 				return CELL_OK;

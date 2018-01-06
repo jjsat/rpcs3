@@ -12,6 +12,8 @@
 #include "Emu/Cell/Modules/cellMsgDialog.h"
 #include "Emu/Cell/Modules/sceNpTrophy.h"
 
+#include <time.h>
+
 extern u64 get_system_time();
 
 // Definition of user interface implementations
@@ -232,7 +234,14 @@ namespace rsx
 			std::unique_ptr<label> m_description;
 			std::unique_ptr<label> m_time_thingy;
 
-			s32 return_code = selection_code::canceled;
+			std::string current_time()
+			{
+				time_t t = time(NULL);
+				char buf[128];
+				strftime(buf, 128, "%c", localtime(&t));
+
+				return buf;
+			}
 
 		public:
 			save_dialog()
@@ -252,9 +261,11 @@ namespace rsx
 
 				m_time_thingy->set_font("Arial", 14);
 				m_time_thingy->set_pos(1000, 40);
-				m_time_thingy->text = "Sat, Jan 01, 00: 00: 00 GMT";
+				m_time_thingy->text = current_time();
 
 				m_dim_background->back_color.a = 0.8f;
+
+				return_code = selection_code::canceled;
 			}
 
 			void on_button_pressed(pad_button button_press) override
@@ -319,6 +330,11 @@ namespace rsx
 					return selection_code::new_save;
 
 				return return_code;
+			}
+
+			void update() override
+			{
+				m_time_thingy->set_text(current_time());
 			}
 		};
 

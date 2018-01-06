@@ -172,6 +172,9 @@ namespace rsx
 
 			stbtt_aligned_quad get_char(char c, f32 &x_advance, f32 &y_advance)
 			{
+				if (!initialized)
+					return{};
+
 				stbtt_aligned_quad quad;
 				stbtt_GetPackedQuad(pack_info.data(), width, height, c, &x_advance, &y_advance, &quad, true);
 				return quad;

@@ -507,8 +507,8 @@ namespace gl
 			program_handle.uniforms["time"] = (f32)(get_system_time() / 1000) * 0.005f;
 			for (auto &cmd : ui.get_compiled().draw_commands)
 			{
-				upload_vertex_data((f32*)cmd.second.data(), cmd.second.size() * 4);
-				num_drawable_elements = cmd.second.size();
+				upload_vertex_data((f32*)cmd.second.data(), (u32)cmd.second.size() * 4u);
+				num_drawable_elements = (u32)cmd.second.size();
 				is_font_draw = false;
 				GLint texture_exists = GL_TRUE;
 

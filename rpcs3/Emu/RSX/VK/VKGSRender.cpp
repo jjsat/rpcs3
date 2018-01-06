@@ -1619,13 +1619,58 @@ void VKGSRender::on_init_thread()
 	GSRender::on_init_thread();
 	rsx_thread = std::this_thread::get_id();
 
-	m_frame->disable_wm_event_queue();
-	m_frame->hide();
+	if (!supports_native_ui)
+	{
+		m_frame->disable_wm_event_queue();
+		m_frame->hide();
 
-	m_shaders_cache->load(*m_device, pipeline_layout);
+		m_shaders_cache->load(nullptr, *m_device, pipeline_layout);
 
-	m_frame->enable_wm_event_queue();
-	m_frame->show();
+		m_frame->enable_wm_event_queue();
+		m_frame->show();
+	}
+	else
+	{
+		struct native_helper : vk::shader_cache::progress_dialog_helper
+		{
+			rsx::thread *owner = nullptr;
+			rsx::overlays::message_dialog *dlg = nullptr;
+
+			native_helper(VKGSRender *ptr) :
+				owner(ptr) {}
+
+			void create() override
+			{
+				MsgDialogType type = {};
+				type.disable_cancel = false;
+				type.progress_bar_count = 1;
+
+				dlg = owner->shell_open_message_dialog();
+				dlg->show("Loading precompiled shaders from disk...", type, nullptr);
+			}
+
+			void update_msg(u32 processed, u32 entry_count) override
+			{
+				dlg->progress_bar_set_message(0, fmt::format("Loading pipeline object %u of %u", processed, entry_count));
+				owner->flip(0);
+			}
+
+			void inc_value(u32 value) override
+			{
+				dlg->progress_bar_increment(0, (f32)value);
+				owner->flip(0);
+			}
+
+			void close() override
+			{
+				dlg->close();
+			}
+		}
+		helper(this);
+
+		m_shaders_cache->load(&helper, *m_device, pipeline_layout);
+		m_frame->enable_wm_event_queue();
+	}
 }
 
 void VKGSRender::on_exit()

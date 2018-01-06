@@ -402,7 +402,8 @@ namespace rsx
 
 				if (interactive)
 				{
-					result.add(bottom_bar.get_compiled());
+					if (!num_progress_bars)
+						result.add(bottom_bar.get_compiled());
 
 					if (!cancel_only)
 						result.add(btn_ok.get_compiled());
@@ -466,13 +467,13 @@ namespace rsx
 				num_progress_bars = type.progress_bar_count;
 				if (num_progress_bars)
 				{
-					u16 offset = 25;
-					progress_1.set_pos(240, 400);
+					u16 offset = 50;
+					progress_1.set_pos(240, 420);
 
 					if (num_progress_bars > 1)
 					{
-						progress_2.set_pos(240, 425);
-						offset = 50;
+						progress_2.set_pos(240, 470);
+						offset = 90;
 					}
 
 					//Push the other stuff down
@@ -493,13 +494,13 @@ namespace rsx
 					interactive = !type.disable_cancel;
 					if (interactive)
 					{
-						btn_cancel.set_pos(585, 420);
-						btn_cancel.set_text("Back");
+						btn_cancel.set_pos(585, btn_cancel.y);
+						btn_cancel.set_text("Cancel");
 						cancel_only = true;
 					}
 					break;
 				case CELL_MSGDIALOG_TYPE_BUTTON_TYPE_OK:
-					btn_ok.set_pos(600, 420);
+					btn_ok.set_pos(600, btn_ok.y);
 					btn_ok.set_text("OK");
 					interactive = true;
 					ok_only = true;
@@ -524,7 +525,7 @@ namespace rsx
 				return CELL_OK;
 			}
 
-			s32 progress_bar_set_message(u32 index, const char* msg)
+			s32 progress_bar_set_message(u32 index, const std::string& msg)
 			{
 				if (index >= num_progress_bars)
 					return CELL_MSGDIALOG_ERROR_PARAM;

@@ -196,7 +196,7 @@ namespace rsx
 				{
 					if (char c = text[i++])
 					{
-						if (c >= char_count)
+						if ((u32)c >= char_count)
 						{
 							//Unsupported glyph, render null for now
 							c = ' ';
@@ -661,13 +661,13 @@ namespace rsx
 				f32 w = 0.f;
 				f32 unused = 0.f;
 				f32 max_w = 0.f;
-				height = renderer->size_px;
+				height = (u16)renderer->size_px;
 
 				for (auto c : text)
 				{
 					if (c == '\n')
 					{
-						height += renderer->size_px + 2;
+						height += (u16)renderer->size_px + 2;
 						max_w = std::max(max_w, w);
 						w = 0.f;
 						continue;
@@ -1026,6 +1026,7 @@ namespace rsx
 			{
 				u16 text_w, text_h;
 				text_view.measure_text(text_w, text_h);
+				text_h += 5;
 
 				overlay_element::set_pos(_x, _y + text_h);
 				indicator.set_pos(_x, _y + text_h);
@@ -1048,7 +1049,12 @@ namespace rsx
 			{
 				text_view.set_text(str);
 				text_view.align_text(text_align::center);
-				text_view.auto_resize();
+
+				u16 text_w, text_h;
+				text_view.measure_text(text_w, text_h);
+				text_view.set_size(w, text_h);
+
+				set_pos(text_view.x, text_view.y);
 				is_compiled = false;
 			}
 
@@ -1056,7 +1062,12 @@ namespace rsx
 			{
 				text_view.set_text(str);
 				text_view.align_text(text_align::center);
-				text_view.auto_resize();
+
+				u16 text_w, text_h;
+				text_view.measure_text(text_w, text_h);
+				text_view.set_size(w, text_h);
+
+				set_pos(text_view.x, text_view.y);
 				is_compiled = false;
 			}
 
@@ -1065,6 +1076,7 @@ namespace rsx
 				if (!is_compiled)
 				{
 					auto& compiled = overlay_element::get_compiled();
+					compiled.add(text_view.get_compiled());
 
 					indicator.back_color = fore_color;
 					indicator.refresh();

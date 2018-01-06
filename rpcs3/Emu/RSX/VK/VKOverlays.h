@@ -638,7 +638,7 @@ namespace vk
 			auto tmp_first = first_vertex;
 			auto num_quads = num_drawable_elements / 4;
 
-			for (int n = 0; n < num_quads; ++n)
+			for (u32 n = 0; n < num_quads; ++n)
 			{
 				vkCmdDraw(cmd, 4, 1, tmp_first, 0);
 				tmp_first += 4;

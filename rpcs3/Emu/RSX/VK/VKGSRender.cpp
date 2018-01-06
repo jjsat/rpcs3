@@ -1619,15 +1619,12 @@ void VKGSRender::on_init_thread()
 	GSRender::on_init_thread();
 	rsx_thread = std::this_thread::get_id();
 
+	m_frame->disable_wm_event_queue();
+
 	if (!supports_native_ui)
 	{
-		m_frame->disable_wm_event_queue();
 		m_frame->hide();
-
 		m_shaders_cache->load(nullptr, *m_device, pipeline_layout);
-
-		m_frame->enable_wm_event_queue();
-		m_frame->show();
 	}
 	else
 	{
@@ -1642,11 +1639,15 @@ void VKGSRender::on_init_thread()
 			void create() override
 			{
 				MsgDialogType type = {};
-				type.disable_cancel = false;
+				type.disable_cancel = true;
 				type.progress_bar_count = 1;
 
 				dlg = owner->shell_open_message_dialog();
-				dlg->show("Loading precompiled shaders from disk...", type, nullptr);
+				dlg->show("Loading precompiled shaders from disk...", type, [](s32 status)
+				{
+					if (status != CELL_OK)
+						Emu.Stop();
+				});
 			}
 
 			void update_msg(u32 processed, u32 entry_count) override
@@ -1663,14 +1664,18 @@ void VKGSRender::on_init_thread()
 
 			void close() override
 			{
+				dlg->return_code = CELL_OK;
 				dlg->close();
 			}
 		}
 		helper(this);
 
+		//TODO: Handle window resize messages during loading on GPUs without OUT_OF_DATE_KHR support
 		m_shaders_cache->load(&helper, *m_device, pipeline_layout);
-		m_frame->enable_wm_event_queue();
 	}
+
+	m_frame->enable_wm_event_queue();
+	m_frame->show();
 }
 
 void VKGSRender::on_exit()

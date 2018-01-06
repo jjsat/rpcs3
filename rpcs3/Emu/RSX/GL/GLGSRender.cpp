@@ -782,11 +782,15 @@ void GLGSRender::on_init_thread()
 			void create() override
 			{
 				MsgDialogType type = {};
-				type.disable_cancel = false;
+				type.disable_cancel = true;
 				type.progress_bar_count = 1;
 
 				dlg = owner->shell_open_message_dialog();
-				dlg->show("Loading precompiled shaders from disk...", type, nullptr);
+				dlg->show("Loading precompiled shaders from disk...", type, [](s32 status)
+				{
+					if (status != CELL_OK)
+						Emu.Stop();
+				});
 			}
 
 			void update_msg(u32 processed, u32 entry_count) override
@@ -803,15 +807,17 @@ void GLGSRender::on_init_thread()
 
 			void close() override
 			{
+				dlg->return_code = CELL_OK;
 				dlg->close();
 			}
 		}
 		helper(this);
 
-		m_shaders_cache->load(&helper);
 		m_frame->enable_wm_event_queue();
+		m_shaders_cache->load(&helper);
 	}
 }
+
 
 void GLGSRender::on_exit()
 {

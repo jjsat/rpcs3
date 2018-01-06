@@ -234,10 +234,29 @@ s32 cellMsgDialogClose(f32 delay)
 {
 	cellSysutil.warning("cellMsgDialogClose(delay=%f)", delay);
 
+	extern u64 get_system_time();
+	const u64 wait_until = get_system_time() + static_cast<s64>(std::max<float>(delay, 0.0f) * 1000);
+
 	if (auto rsxthr = fxm::get<GSRender>())
 	{
-		if (rsxthr->shell_close_dialog())
+		if (auto dlg = rsxthr->shell_get_current_dialog())
 		{
+			thread_ctrl::spawn("cellMsgDialogClose() Thread", [=]
+			{
+				while (get_system_time() < wait_until)
+				{
+					if (Emu.IsStopped())
+						return;
+
+					if (rsxthr->shell_get_current_dialog() != dlg)
+						return;
+
+					std::this_thread::sleep_for(1ms);
+				}
+
+				dlg->close();
+			});
+
 			return CELL_OK;
 		}
 	}
@@ -248,10 +267,6 @@ s32 cellMsgDialogClose(f32 delay)
 	{
 		return CELL_MSGDIALOG_ERROR_DIALOG_NOT_OPENED;
 	}
-
-	extern u64 get_system_time();
-
-	const u64 wait_until = get_system_time() + static_cast<s64>(std::max<float>(delay, 0.0f) * 1000);
 
 	thread_ctrl::spawn("cellMsgDialogClose() Thread", [=]()
 	{

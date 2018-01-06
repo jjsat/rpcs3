@@ -369,7 +369,7 @@ namespace rsx
 				btn_cancel.set_pos(685, 420);
 				btn_cancel.set_font("Arial", 16);
 
-				return_code = CELL_MSGDIALOG_BUTTON_ESCAPE;
+				return_code = CELL_MSGDIALOG_BUTTON_NONE;
 			}
 
 			compiled_resource get_compiled() override

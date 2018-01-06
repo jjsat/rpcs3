@@ -411,14 +411,14 @@ namespace rsx
 
 			std::vector<std::pair<command_config, std::vector<vertex>>> draw_commands;
 
-			void add(compiled_resource& other)
+			void add(const compiled_resource& other)
 			{
 				auto old_size = draw_commands.size();
 				draw_commands.resize(old_size + other.draw_commands.size());
 				std::copy(other.draw_commands.begin(), other.draw_commands.end(), draw_commands.begin() + old_size);
 			}
 
-			void add(compiled_resource& other, f32 x_offset, f32 y_offset)
+			void add(const compiled_resource& other, f32 x_offset, f32 y_offset)
 			{
 				auto old_size = draw_commands.size();
 				draw_commands.resize(old_size + other.draw_commands.size());
@@ -526,7 +526,7 @@ namespace rsx
 				is_compiled = false;
 			}
 
-			virtual void set_text(std::string& text)
+			virtual void set_text(const std::string& text)
 			{
 				this->text = text;
 				is_compiled = false;
@@ -1052,7 +1052,7 @@ namespace rsx
 				is_compiled = false;
 			}
 
-			void set_text(std::string& str) override
+			void set_text(const std::string& str) override
 			{
 				text_view.set_text(str);
 				text_view.align_text(text_align::center);

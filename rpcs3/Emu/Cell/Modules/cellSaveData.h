@@ -291,5 +291,5 @@ class SaveDialogBase
 public:
 	virtual ~SaveDialogBase();
 
-	virtual s32 ShowSaveDataList(std::vector<SaveDataEntry>& save_entries, s32 focused, u32 op, vm::ptr<CellSaveDataListSet> listSet) = 0;
+	virtual s32 ShowSaveDataList(ppu_thread& ppu, std::vector<SaveDataEntry>& save_entries, s32 focused, u32 op, vm::ptr<CellSaveDataListSet> listSet) = 0;
 };

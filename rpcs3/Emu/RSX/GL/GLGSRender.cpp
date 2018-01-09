@@ -1419,7 +1419,7 @@ void GLGSRender::on_notify_memory_unmapped(u32 address_base, u32 size)
 	}
 }
 
-void GLGSRender::do_local_task()
+void GLGSRender::do_local_task(bool idle)
 {
 	m_frame->clear_wm_events();
 
@@ -1442,7 +1442,7 @@ void GLGSRender::do_local_task()
 
 	if (m_custom_ui)
 	{
-		if (native_ui_flip_request.load())
+		if (!in_begin_end && idle && native_ui_flip_request.load())
 		{
 			native_ui_flip_request.store(false);
 			flip((s32)current_display_buffer);

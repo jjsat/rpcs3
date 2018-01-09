@@ -336,8 +336,9 @@ namespace rsx
 		
 		/**
 		 * Execute a backend local task queue
+		 * Idle argument checks that the FIFO queue is in an idle state
 		 */
-		virtual void do_local_task() {}
+		virtual void do_local_task(bool idle) {}
 
 	public:
 		virtual std::string get_name() const override;

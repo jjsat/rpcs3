@@ -481,15 +481,15 @@ namespace rsx
 		// TODO: exit condition
 		while (!Emu.IsStopped())
 		{
-			//Execute backend-local tasks first
-			do_local_task();
-
 			//Wait for external pause events
 			if (external_interrupt_lock.load())
 			{
 				external_interrupt_ack.store(true);
 				while (external_interrupt_lock.load()) _mm_pause();
 			}
+
+			//Execute backend-local tasks first
+			do_local_task(ctrl->put.load() == internal_get.load());
 
 			//Set up restore state if needed
 			if (sync_point_request)

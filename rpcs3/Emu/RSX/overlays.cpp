@@ -22,7 +22,6 @@ namespace rsx
 			if (auto rsxthr = fxm::get<GSRender>())
 			{
 				rsxthr->native_ui_flip_request.store(true);
-				std::this_thread::sleep_for(16ms);
 			}
 		}
 	}

@@ -2048,7 +2048,7 @@ void VKGSRender::process_swap_request(frame_context_t *ctx, bool free_resources)
 	ctx->swap_command_buffer = nullptr;
 }
 
-void VKGSRender::do_local_task()
+void VKGSRender::do_local_task(bool idle)
 {
 	//TODO: Guard this
 	if (m_overlay_cleanup_requests.size())
@@ -2166,7 +2166,7 @@ void VKGSRender::do_local_task()
 
 	if (m_custom_ui)
 	{
-		if (native_ui_flip_request.load())
+		if (!in_begin_end && native_ui_flip_request.load())
 		{
 			native_ui_flip_request.store(false);
 			flush_command_queue(true);

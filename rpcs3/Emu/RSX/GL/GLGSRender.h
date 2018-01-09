@@ -362,7 +362,7 @@ protected:
 	void flip(int buffer) override;
 	u64 timestamp() const override;
 
-	void do_local_task() override;
+	void do_local_task(bool idle) override;
 
 	bool on_access_violation(u32 address, bool is_writing) override;
 	void on_notify_memory_unmapped(u32 address_base, u32 size) override;

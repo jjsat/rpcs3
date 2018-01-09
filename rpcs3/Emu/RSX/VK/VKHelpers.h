@@ -1186,7 +1186,7 @@ namespace vk
 			m_instance = nullptr;
 
 			//Check that some critical entry-points have been loaded into memory indicating prescence of a loader
-			loader_exists = (&vkCreateInstance != nullptr);
+			loader_exists = (vkCreateInstance != nullptr);
 		}
 
 		~context()
@@ -1233,7 +1233,11 @@ namespace vk
 
 		uint32_t createInstance(const char *app_name, bool fast = false)
 		{
-			if (!loader_exists) return 0;
+			if (!loader_exists)
+			{
+				LOG_ERROR(RSX, "vk::context::createInstance failed because the vulkan loader is not present");
+				return 0;
+			}
 
 			//Initialize a vulkan instance
 			VkApplicationInfo app = {};
@@ -1243,7 +1247,7 @@ namespace vk
 			app.applicationVersion = 0;
 			app.pEngineName = app_name;
 			app.engineVersion = 0;
-			app.apiVersion = VK_MAKE_VERSION(1, 0, 0);
+			app.apiVersion = VK_API_VERSION_1_0;
 
 			//Set up instance information
 			const char *requested_extensions[] =
@@ -1257,22 +1261,27 @@ namespace vk
 				"VK_EXT_debug_report",
 			};
 
-			std::vector<const char *> layers;
+			const char * layers[] =
+			{
+				"VK_LAYER_LUNARG_standard_validation"
+			};
 
-			if (!fast && g_cfg.video.debug_output)
-				layers.push_back("VK_LAYER_LUNARG_standard_validation");
+			u32 layer_count = (!fast && g_cfg.video.debug_output) ? 1 : 0;
 
 			VkInstanceCreateInfo instance_info = {};
 			instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 			instance_info.pApplicationInfo = &app;
-			instance_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
-			instance_info.ppEnabledLayerNames = layers.data();
+			instance_info.enabledLayerCount = layer_count;
+			instance_info.ppEnabledLayerNames = layer_count? layers: nullptr;
 			instance_info.enabledExtensionCount = fast? 0: 3;
 			instance_info.ppEnabledExtensionNames = fast? nullptr: requested_extensions;
 
 			VkInstance instance;
-			if (vkCreateInstance(&instance_info, nullptr, &instance) != VK_SUCCESS)
+			if (auto error = vkCreateInstance(&instance_info, nullptr, &instance))
+			{
+				LOG_ERROR(RSX, "vkCreateInstance failed with error code %d", (s32)error);
 				return 0;
+			}
 
 			m_vk_instances.push_back(instance);
 			return (u32)m_vk_instances.size();

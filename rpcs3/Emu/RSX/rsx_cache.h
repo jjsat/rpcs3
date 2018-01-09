@@ -285,7 +285,7 @@ namespace rsx
 
 			virtual void create()
 			{
-				auto dlg = Emu.GetCallbacks().get_msg_dialog();
+				dlg = Emu.GetCallbacks().get_msg_dialog();
 				dlg->type.se_normal = true;
 				dlg->type.bg_invisible = true;
 				dlg->type.progress_bar_count = 1;
@@ -297,7 +297,7 @@ namespace rsx
 					});
 				};
 
-				Emu.CallAfter([=]()
+				Emu.CallAfter([&]()
 				{
 					dlg->Create("Preloading cached shaders from disk.\nPlease wait...");
 				});
@@ -305,7 +305,7 @@ namespace rsx
 
 			virtual void update_msg(u32 processed, u32 entry_count)
 			{
-				Emu.CallAfter([=]()
+				Emu.CallAfter([&]()
 				{
 					dlg->ProgressBarSetMsg(0, fmt::format("Loading pipeline object %u of %u", processed, entry_count));
 				});
@@ -313,16 +313,14 @@ namespace rsx
 
 			virtual void inc_value(u32 value)
 			{
-				Emu.CallAfter([=]()
+				Emu.CallAfter([&]()
 				{
 					dlg->ProgressBarInc(0, value);
 				});
 			}
 
 			virtual void close()
-			{
-				dlg.reset();
-			}
+			{}
 		};
 
 		shaders_cache(backend_storage& storage, std::string pipeline_class, std::string version_prefix_str = "v1")

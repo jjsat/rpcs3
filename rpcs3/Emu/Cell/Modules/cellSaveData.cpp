@@ -2,6 +2,7 @@
 #include "Emu/System.h"
 #include "Emu/Cell/PPUModule.h"
 #include "Emu/Cell/Modules/cellSysutil.h"
+#include "Emu/Cell/lv2/sys_sync.h"
 
 #include "cellSaveData.h"
 
@@ -117,7 +118,7 @@ static NEVER_INLINE s32 savedata_op(ppu_thread& ppu, u32 operation, u32 version,
 
 			for (const auto& prefix : prefix_list)
 			{
-				if (entry.name.substr(0, prefix.size()) == prefix)
+				if ("*" == prefix || entry.name.substr(0, prefix.size()) == prefix)
 				{
 					// Count the amount of matches and the amount of listed directories
 					listGet->dirNum++; // total number of directories
@@ -479,6 +480,22 @@ static NEVER_INLINE s32 savedata_op(ppu_thread& ppu, u32 operation, u32 version,
 
 	auto&& psf = psf::load_object(fs::file(sfo_path));
 
+
+	// wait a bit
+	thread_ctrl::spawn("Waiting Thread", [&]()
+	{
+		_sleep(1000);
+		lv2_obj::awake(ppu);
+	});
+
+	lv2_obj::sleep(ppu);
+
+	while (!ppu.state.test_and_reset(cpu_flag::signal))
+	{
+		thread_ctrl::wait();
+	}
+
+
 	// Get save stats
 	{
 		fs::stat_t dir_info{};
@@ -530,10 +547,10 @@ static NEVER_INLINE s32 savedata_op(ppu_thread& ppu, u32 operation, u32 version,
 
 				statGet->fileNum++;
 
+				size_kbytes += (entry.size + 1023) / 1024; // firmware rounds this value up
+
 				if (statGet->fileListNum >= setBuf->fileListMax)
 					continue;
-
-				size_kbytes += (entry.size + 1023) / 1024; // firmware rounds this value up
 
 				statGet->fileListNum++;
 
@@ -573,8 +590,8 @@ static NEVER_INLINE s32 savedata_op(ppu_thread& ppu, u32 operation, u32 version,
 			}
 		}
 
-		statGet->sysSizeKB = size_system_kbytes;
-		statGet->sizeKB = size_kbytes + size_system_kbytes;
+		statGet->sysSizeKB = 35;// size_system_kbytes;
+		statGet->sizeKB = size_kbytes ? size_kbytes + statGet->sysSizeKB : 0;
 
 		// Stat Callback
 		funcStat(ppu, result, statGet, statSet);
@@ -609,12 +626,13 @@ static NEVER_INLINE s32 savedata_op(ppu_thread& ppu, u32 operation, u32 version,
 				{ "TITLE", psf::string(128, statSet->setParam->title) },
 			});
 		}
-		//else if (psf.empty())
-		//{
-		//	// setParam is specified if something required updating.
-		//	// Do not exit. Recreate mode will handle the rest
-		//	//return CELL_OK;
-		//}
+		else if (psf.empty())
+		{
+			// this is probably not quite right
+
+			// ****** sysutil savedata parameter error : 50 ******
+			return CELL_SAVEDATA_ERROR_PARAM;
+		}
 
 		switch (const u32 mode = statSet->reCreateMode & 0xffff)
 		{

@@ -1,8 +1,9 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "Emu/System.h"
 #include "Emu/Cell/PPUModule.h"
 #include "Emu/IdManager.h"
 #include "Emu/RSX/rsx_utils.h"
+#include "Utilities/StrUtil.h"
 
 #include "cellAudioIn.h"
 #include "cellAudioOut.h"
@@ -10,6 +11,106 @@
 #include "cellSysutil.h"
 
 LOG_CHANNEL(cellAvconfExt);
+
+enum class device_in
+{
+	camera,
+	standard_microphone,
+	singstar_microphone,
+};
+
+struct avconf_manager
+{
+	std::vector<CellAudioInDeviceInfo> devices;
+
+	void copy_device_info(u32 num, vm::ptr<CellAudioInDeviceInfo> info);
+	avconf_manager();
+};
+
+avconf_manager::avconf_manager()
+{
+	u32 curindex = 0;
+
+	auto mic_list = fmt::split(g_cfg.audio.microphone_devices, { ";" });
+	if (mic_list.size())
+	{
+		switch (g_cfg.audio.microphone_type)
+		{
+		case microphone_handler::standard:
+			for (u32 index = 0; index < mic_list.size(); index++)
+			{
+				devices.emplace_back();
+
+				devices[curindex].portType = CELL_AUDIO_IN_PORT_USB;
+				devices[curindex].availableModeCount = 1;
+				devices[curindex].state = CELL_AUDIO_IN_DEVICE_STATE_AVAILABLE;
+				devices[curindex].deviceId = 0xE11CC0DE + curindex;
+				devices[curindex].type = 0xC0DEE11C;
+				devices[curindex].availableModes[0].type = CELL_AUDIO_IN_CODING_TYPE_LPCM;
+				devices[curindex].availableModes[0].channel = CELL_AUDIO_IN_CHNUM_2;
+				devices[curindex].availableModes[0].fs = CELL_AUDIO_IN_FS_8KHZ | CELL_AUDIO_IN_FS_12KHZ | CELL_AUDIO_IN_FS_16KHZ | CELL_AUDIO_IN_FS_24KHZ | CELL_AUDIO_IN_FS_32KHZ | CELL_AUDIO_IN_FS_48KHZ;
+				devices[curindex].deviceNumber = curindex;
+				strcpy(devices[curindex].name, mic_list[index].c_str());
+
+				curindex++;
+			}
+			break;
+			// Only one device for singstar device
+		case microphone_handler::real_singstar:
+		case microphone_handler::singstar:
+			devices.emplace_back();
+
+			devices[curindex].portType = CELL_AUDIO_IN_PORT_USB;
+			devices[curindex].availableModeCount = 1;
+			devices[curindex].state = CELL_AUDIO_IN_DEVICE_STATE_AVAILABLE;
+			devices[curindex].deviceId = 0x57A3C0DE;
+			devices[curindex].type = 0xC0DE57A3;
+			devices[curindex].availableModes[0].type = CELL_AUDIO_IN_CODING_TYPE_LPCM;
+			devices[curindex].availableModes[0].channel = CELL_AUDIO_IN_CHNUM_2;
+			devices[curindex].availableModes[0].fs = CELL_AUDIO_IN_FS_8KHZ | CELL_AUDIO_IN_FS_12KHZ | CELL_AUDIO_IN_FS_16KHZ | CELL_AUDIO_IN_FS_24KHZ | CELL_AUDIO_IN_FS_32KHZ | CELL_AUDIO_IN_FS_48KHZ;
+			devices[curindex].deviceNumber = curindex;
+			strcpy(devices[curindex].name, mic_list[0].c_str());
+
+			curindex++;
+			break;
+		}
+	}
+
+	if (g_cfg.io.camera != camera_handler::null)
+	{
+		devices.emplace_back();
+
+		devices[curindex].portType = CELL_AUDIO_IN_PORT_USB;
+		devices[curindex].availableModeCount = 1;
+		devices[curindex].state = CELL_AUDIO_IN_DEVICE_STATE_AVAILABLE;
+		devices[curindex].deviceId = 0xDEADBEEF;
+		devices[curindex].type = 0xBEEFDEAD;
+		devices[curindex].availableModes[0].type = CELL_AUDIO_IN_CODING_TYPE_LPCM;
+		devices[curindex].availableModes[0].channel = CELL_AUDIO_IN_CHNUM_NONE;
+		devices[curindex].availableModes[0].fs = CELL_AUDIO_IN_FS_8KHZ | CELL_AUDIO_IN_FS_12KHZ | CELL_AUDIO_IN_FS_16KHZ | CELL_AUDIO_IN_FS_24KHZ | CELL_AUDIO_IN_FS_32KHZ | CELL_AUDIO_IN_FS_48KHZ;
+		devices[curindex].deviceNumber = curindex;
+		strcpy(devices[curindex].name, "USB Camera");
+
+		curindex++;
+	}
+
+}
+
+void avconf_manager::copy_device_info(u32 num, vm::ptr<CellAudioInDeviceInfo> info)
+{
+	memset(info.get_ptr(), 0, sizeof(CellAudioInDeviceInfo));
+
+	info->portType                  = devices[num].portType;
+	info->availableModeCount        = devices[num].availableModeCount;
+	info->state                     = devices[num].state;
+	info->deviceId                  = devices[num].deviceId;
+	info->type                      = devices[num].type;
+	info->availableModes[0].type    = devices[num].availableModes[0].type;
+	info->availableModes[0].channel = devices[num].availableModes[0].channel;
+	info->availableModes[0].fs      = devices[num].availableModes[0].fs;
+	info->deviceNumber              = devices[num].deviceNumber;
+	strcpy(info->name, devices[num].name);
+}
 
 s32 cellAudioOutUnregisterDevice(u32 deviceNumber)
 {
@@ -38,17 +139,14 @@ s32 cellVideoOutSetupDisplay()
 s32 cellAudioInGetDeviceInfo(u32 deviceNumber, u32 deviceIndex, vm::ptr<CellAudioInDeviceInfo> info)
 {
 	cellAvconfExt.todo("cellAudioInGetDeviceInfo(deviceNumber=0x%x, deviceIndex=0x%x, info=*0x%x)", deviceNumber, deviceIndex, info);
-	info->portType = CELL_AUDIO_IN_PORT_USB;
-	info->availableModeCount = 1;
-	info->state = CELL_AUDIO_IN_DEVICE_STATE_AVAILABLE;
-	info->deviceNumber = 0;
-	// Some games check if deviceId and type are the same.
-	info->deviceId = 0xDEADBEEF;
-	info->type = 0xBEEFDEAD;
-	info->availableModes[0].type = CELL_AUDIO_IN_CODING_TYPE_LPCM;
-	info->availableModes[0].channel = CELL_AUDIO_IN_CHNUM_NONE;
-	info->availableModes[0].fs = CELL_AUDIO_IN_FS_8KHZ | CELL_AUDIO_IN_FS_12KHZ | CELL_AUDIO_IN_FS_16KHZ | CELL_AUDIO_IN_FS_24KHZ | CELL_AUDIO_IN_FS_32KHZ | CELL_AUDIO_IN_FS_48KHZ;
-	strcpy(info->name, "USB Camera");
+
+	auto av_manager = fxm::get_always<avconf_manager>();
+
+	if (deviceNumber >= av_manager->devices.size())
+		return CELL_AUDIO_OUT_ERROR_DEVICE_NOT_FOUND;
+
+	av_manager->copy_device_info(deviceNumber, info);
+
 	return CELL_OK;
 }
 
@@ -73,21 +171,23 @@ s32 cellVideoOutGetGamma(u32 videoOut, vm::ptr<f32> gamma)
 	return CELL_OK;
 }
 
-s32 cellAudioInGetAvailableDeviceInfo(u32 count, vm::ptr<CellAudioInDeviceInfo> info)
+s32 cellAudioInGetAvailableDeviceInfo(u32 count, vm::ptr<CellAudioInDeviceInfo> device_info)
 {
-	cellAvconfExt.todo("cellAudioInGetAvailableDeviceInfo(count=0x%x, info=*0x%x)", count, info);
-	info->portType = CELL_AUDIO_IN_PORT_USB;
-	info->availableModeCount = 1;
-	info->state = CELL_AUDIO_IN_DEVICE_STATE_AVAILABLE;
-	info->deviceNumber = 0;
-	// Some games check if deviceId and type are the same.
-	info->deviceId = 0xDEADBEEF;
-	info->type = 0xBEEFDEAD;
-	info->availableModes[0].type = CELL_AUDIO_IN_CODING_TYPE_LPCM;
-	info->availableModes[0].channel = CELL_AUDIO_IN_CHNUM_NONE;
-	info->availableModes[0].fs = CELL_AUDIO_IN_FS_8KHZ | CELL_AUDIO_IN_FS_12KHZ | CELL_AUDIO_IN_FS_16KHZ | CELL_AUDIO_IN_FS_24KHZ | CELL_AUDIO_IN_FS_32KHZ | CELL_AUDIO_IN_FS_48KHZ;
-	strcpy(info->name, "USB Camera");
-	return 1; // number of available devices
+	cellAvconfExt.todo("cellAudioInGetAvailableDeviceInfo(count=0x%x, info=*0x%x)", count, device_info);
+
+	if (count > 16 || !device_info.addr())
+	{
+		return CELL_AUDIO_IN_ERROR_ILLEGAL_PARAMETER;
+	}
+
+	auto av_manager = fxm::get_always<avconf_manager>();
+
+	for (u32 index = 0; index < count && index < av_manager->devices.size(); index++)
+	{
+		av_manager->copy_device_info(index, device_info + index);
+	}
+
+	return count < av_manager->devices.size() ? count : av_manager->devices.size();
 }
 
 s32 cellAudioOutGetAvailableDeviceInfo(u32 count, vm::ptr<CellAudioOutDeviceInfo2> info)
@@ -137,6 +237,7 @@ s32 cellAudioInSetDeviceMode(u32 deviceMode)
 s32 cellAudioInRegisterDevice(u64 deviceType, vm::cptr<char> name, vm::ptr<CellAudioInRegistrationOption> option, vm::ptr<CellAudioInDeviceConfiguration> config)
 {
 	cellAvconfExt.todo("cellAudioInRegisterDevice(deviceType=0x%llx, name=%s, option=*0x%x, config=*0x%x)", deviceType, name, option, config);
+
 	return 0; // device number
 }
 

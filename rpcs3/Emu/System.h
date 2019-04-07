@@ -125,6 +125,7 @@ enum class microphone_handler
 	standard,
 	singstar,
 	real_singstar,
+	rocksmith
 };
 
 enum class video_resolution

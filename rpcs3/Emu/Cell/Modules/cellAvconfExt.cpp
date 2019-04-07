@@ -73,6 +73,23 @@ avconf_manager::avconf_manager()
 
 			curindex++;
 			break;
+		case microphone_handler::rocksmith:
+			devices.emplace_back();
+
+			devices[curindex].portType                  = CELL_AUDIO_IN_PORT_USB;
+			devices[curindex].availableModeCount        = 1;
+			devices[curindex].state                     = CELL_AUDIO_IN_DEVICE_STATE_AVAILABLE;
+			devices[curindex].deviceId                  = 0x12BA00FF;
+			devices[curindex].type                      = 0xC0DE57A3;
+			devices[curindex].availableModes[0].type    = CELL_AUDIO_IN_CODING_TYPE_LPCM;
+			devices[curindex].availableModes[0].channel = CELL_AUDIO_IN_CHNUM_1;
+			devices[curindex].availableModes[0].fs      = CELL_AUDIO_IN_FS_8KHZ | CELL_AUDIO_IN_FS_12KHZ | CELL_AUDIO_IN_FS_16KHZ | CELL_AUDIO_IN_FS_24KHZ | CELL_AUDIO_IN_FS_32KHZ | CELL_AUDIO_IN_FS_48KHZ;
+			devices[curindex].deviceNumber              = curindex;
+			strcpy(devices[curindex].name, mic_list[0].c_str());
+
+			curindex++;
+			break;
+
 		}
 	}
 

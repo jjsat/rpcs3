@@ -20,6 +20,7 @@ void fmt_class_string<microphone_handler>::format(std::string& out, u64 arg)
 		case microphone_handler::standard: return "Standard";
 		case microphone_handler::singstar: return "Singstar";
 		case microphone_handler::real_singstar: return "Real Singstar";
+		case microphone_handler::rocksmith: return "Rocksmith Guitar";
 		}
 
 		return unknown;
@@ -74,6 +75,7 @@ void mic_context::get_raw(microphone_device& mic, u32 num_samples)
 		memcpy(tmp_ptr, mic.internal_bufs[0].data(), num_samples * (mic.bit_resolution / 8 ) * mic.num_channels);
 		break;
 	case microphone_handler::standard:
+	case microphone_handler::rocksmith:
 		// BE Translation
 		for (u32 index = 0; index < num_samples; index++)
 		{
@@ -126,6 +128,7 @@ void mic_context::get_dsp(microphone_device& mic, u32 num_samples)
 		memcpy(tmp_ptr, mic.internal_bufs[0].data(), num_samples * (mic.bit_resolution / 8) * mic.num_channels);
 		break;
 	case microphone_handler::standard:
+	case microphone_handler::rocksmith:
 		// BE Translation
 		for (u32 index = 0; index < num_samples; index++)
 		{
@@ -245,7 +248,7 @@ s32 microphone_device::open_microphone()
 	if (alcGetError(device) != ALC_NO_ERROR)
 	{
 		cellMic.error("Error opening capture device %s", device_name[0]);
-#ifdef WIN32
+#ifdef _WIN32
 		cellMic.error("Make sure microphone use is authorized under \"Microphone privacy settings\" in windows configuration");
 #endif
 		return CELL_MIC_ERROR_DEVICE_NOT_SUPPORT;
@@ -389,6 +392,15 @@ s32 cellMicInit()
 			mic.device_name.push_back(device_list[0]);
 			break;
 		}
+		case microphone_handler::rocksmith:
+		{
+			mic_t->mic_list.emplace(std::piecewise_construct, std::forward_as_tuple(0), std::forward_as_tuple());
+			auto& mic = mic_t->mic_list[0];
+
+			mic.device_type = microphone_handler::rocksmith;
+			mic.device_name.push_back(device_list[0]);
+			break;
+		}
 		}
 	}
 
@@ -492,7 +504,7 @@ s32 cellMicOpenEx(u32 dev_num, u32 rawSampleRate, u32 rawChannel, u32 DSPSampleR
 
 	device.raw_samplingrate = rawSampleRate;
 	device.dsp_samplingrate = DSPSampleRate;
-	device.num_channels = rawChannel;
+	device.num_channels     = 1; // FIXME: Rocksmith calls this function with rawValue = 4
 	device.signal_types = signalType;
 
 	// TODO: bufferSizeMS

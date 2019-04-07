@@ -784,7 +784,7 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> guiSettings, std:
 
 	auto ChangeMicrophoneType = [=](QString text)
 	{
-		std::string s_standard, s_singstar, s_realsingstar;
+		std::string s_standard, s_singstar, s_realsingstar, s_rocksmith;
 
 		auto enableMicsCombo = [=](u32 max)
 		{
@@ -824,6 +824,12 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> guiSettings, std:
 		}
 		fmt_class_string<microphone_handler>::format(s_realsingstar, static_cast<u64>(microphone_handler::real_singstar));
 		if (text == s_realsingstar.c_str())
+		{
+			enableMicsCombo(1);
+			return;
+		}
+		fmt_class_string<microphone_handler>::format(s_rocksmith, static_cast<u64>(microphone_handler::rocksmith));
+		if (text == s_rocksmith.c_str())
 		{
 			enableMicsCombo(1);
 			return;
